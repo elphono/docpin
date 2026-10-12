@@ -123,14 +123,29 @@ def test_a_copy_survives_the_plugin_folder_being_deleted(tmp_path):
     assert done.returncode == 0 and "no document" in done.stdout
 
 
-def test_the_hook_through_the_launcher_tells_the_session_to_run_annotate_by_name(make_doc):
-    doc = make_doc("<p>x</p>")
+def hook_context(doc: Path, env: dict[str, str]) -> str:
     done = launch("register", str(doc), "--session", "sess-1", "--cwd", str(doc.parent),
-                  "--hook", env={"ANNOTATE_PORT": str(free_port())})
+                  "--hook", env={"ANNOTATE_PORT": str(free_port()), **env})
     assert done.returncode == 0, done.stderr
-    context = json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"]
+    return str(json.loads(done.stdout)["hookSpecificOutput"]["additionalContext"])
+
+
+def test_the_plugin_hook_tells_the_session_to_run_annotate_by_name(make_doc, tmp_path):
+    doc = make_doc("<p>x</p>")
+    context = hook_context(doc, {"CLAUDE_PLUGIN_ROOT": str(ROOT)})
     assert "`annotate wait " in context                # bin/ is on the session's PATH
     assert str(ROOT) not in context                    # never the plugin's own folder
+    # The same launcher found on the PATH is called by name as well.
+    path = f"{ROOT / 'bin'}:{os.environ['PATH']}"
+    assert "`annotate wait " in hook_context(doc, {"PATH": path})
+
+
+def test_a_launcher_off_the_path_is_called_back_by_its_own_path(make_doc):
+    """A clone whose hook comes from the user's settings: no plugin, so its
+    bin/ is not on the session's PATH, and a bare `annotate` would not run."""
+    doc = make_doc("<p>x</p>")
+    context = hook_context(doc, {})
+    assert f"`{LAUNCHER} wait " in context
 
 
 def test_a_project_folder_named_annotate_cannot_stand_in_for_the_package(tmp_path):
