@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ce qui a changé</title>
+<style>
+:root {
+  --paper: #fbfaf7; --card: #ffffff; --ink: #1f2430; --muted: #5f6673; --line: #e3e0d8;
+  --new: #15803d; --new-soft: rgba(21, 128, 61, .11);
+  --chg: #1d4ed8; --chg-soft: rgba(29, 78, 216, .10);
+  --gone: #b42318; --gone-soft: rgba(180, 35, 24, .09);
+  --pin: #ea580c; --done: #7b8494; --fold: #f1efe9;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #171a21; --card: #1f2430; --ink: #e6e8ec; --muted: #9aa3b2; --line: #343b49;
+    --new: #4ade80; --new-soft: rgba(74, 222, 128, .13);
+    --chg: #7aa2ff; --chg-soft: rgba(122, 162, 255, .14);
+    --gone: #f87171; --gone-soft: rgba(248, 113, 113, .12);
+    --pin: #fb923c; --done: #8a93a3; --fold: #262b36;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #171a21; --card: #1f2430; --ink: #e6e8ec; --muted: #9aa3b2; --line: #343b49;
+  --new: #4ade80; --new-soft: rgba(74, 222, 128, .13);
+  --chg: #7aa2ff; --chg-soft: rgba(122, 162, 255, .14);
+  --gone: #f87171; --gone-soft: rgba(248, 113, 113, .12);
+  --pin: #fb923c; --done: #8a93a3; --fold: #262b36;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1000px; margin: 0 auto; padding: 28px 16px 90px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 6px 0 6px; }
+h2 { font-size: 22px; margin: 44px 0 12px; padding-top: 14px; border-top: 1px solid var(--line); }
+h3 { font-size: 17px; margin: 22px 0 8px; }
+.kicker { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.lede { color: var(--muted); max-width: 760px; }
+code { font: 14px ui-monospace, "Cascadia Code", Menlo, monospace; background: var(--fold);
+  padding: 1px 5px; border-radius: 4px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 22px 0; }
+.tile { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px;
+  border-top: 4px solid var(--c, var(--ink)); }
+.tile b { display: block; font-size: 15px; margin-bottom: 4px; }
+.tile span { color: var(--muted); font-size: 15px; }
+.scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 15px; background: var(--card); }
+th, td { text-align: left; vertical-align: top; padding: 9px 11px; border-bottom: 1px solid var(--line); }
+th { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+blockquote { margin: 12px 0; padding: 10px 16px; border-left: 4px solid var(--pin); background: var(--card);
+  border-radius: 0 8px 8px 0; }
+details { margin: 14px 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 14px; }
+details > summary { cursor: pointer; font-weight: 600; }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  padding: 1px 8px; border-radius: 999px; color: #fff; vertical-align: 1px; }
+.tag.new { background: var(--new); } .tag.chg { background: var(--chg); } .tag.gone { background: var(--gone); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .tag { color: #111; } }
+:root[data-theme="dark"] .tag { color: #111; }
+.dec { color: var(--new); font-weight: 700; }
+figure { margin: 18px 0; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+svg.fig { display: block; width: 100%; height: auto; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+svg .t { fill: var(--ink); font-size: 15px; } svg .tm { fill: var(--muted); font-size: 14px; }
+svg .tb { fill: var(--ink); font-size: 16px; font-weight: 700; }
+svg .box { fill: var(--card); stroke: var(--line); stroke-width: 1.5; }
+svg .arr { fill: none; stroke: var(--muted); stroke-width: 2; }
+
+/* ---------- the mockup: what the reader sees ---------- */
+.mock { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--card);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .07); }
+.mock-chrome { display: flex; gap: 6px; align-items: center; padding: 8px 12px; background: var(--fold);
+  border-bottom: 1px solid var(--line); font: 13px ui-monospace, monospace; color: var(--muted); }
+.mock-chrome i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: inline-block; }
+.mock-body { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 0; }
+@media (max-width: 760px) { .mock-body { grid-template-columns: 1fr; } }
+.mock-doc { padding: 18px 22px 22px 26px; position: relative; }
+.mock-doc h4 { font-size: 17px; margin: 16px 0 8px; }
+.mock-doc p { margin: 8px 0; position: relative; }
+.m-fold { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 10px;
+  padding: 8px 12px; border-radius: 8px; background: var(--fold); color: var(--muted); font-size: 14px;
+  border: 1px dashed var(--line); }
+.m-fold b { color: var(--ink); font-weight: 600; }
+.m-fold u { margin-left: auto; color: var(--chg); text-decoration: none; font-weight: 600; }
+.m-dim { opacity: .5; }
+.m-new, .m-chg { padding: 10px 10px 6px; border-radius: 6px; margin-top: 18px !important; }
+.m-new { background: var(--new-soft); box-shadow: inset 4px 0 0 var(--new); }
+.m-chg { background: var(--chg-soft); box-shadow: inset 4px 0 0 var(--chg); }
+.m-chg mark { background: transparent; color: inherit; border-bottom: 2.5px solid var(--chg); font-weight: 600; }
+.gut { position: absolute; left: 8px; top: -10px; font-size: 11px; font-weight: 800; letter-spacing: .04em;
+  color: #fff; padding: 1px 6px; border-radius: 999px; }
+.gut.new { background: var(--new); } .gut.chg { background: var(--chg); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .gut { color: #111; } }
+:root[data-theme="dark"] .gut { color: #111; }
+.m-removed { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--gone);
+  background: var(--gone-soft); padding: 2px 10px; border-radius: 999px; margin: 2px 0 6px -8px; }
+.m-old { margin: 4px 0 10px; padding: 6px 10px; border-left: 3px solid var(--gone); color: var(--muted);
+  text-decoration: line-through; font-size: 14px; }
+.m-pin { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px;
+  border-radius: 11px; font-size: 12px; font-weight: 700; color: #fff; padding: 0 6px; margin-left: 6px;
+  vertical-align: 1px; border: 2px solid var(--card); }
+.m-pin.live { background: var(--pin); } .m-pin.done { background: var(--done); opacity: .75; min-width: 18px; height: 18px; font-size: 11px; }
+.mock-bar { border-left: 1px solid var(--line); padding: 16px; background: var(--paper); font-size: 14px; }
+@media (max-width: 760px) { .mock-bar { border-left: 0; border-top: 1px solid var(--line); } }
+.mb-head { font-weight: 700; font-size: 15px; }
+.mb-when { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.mb-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 12px; }
+.mb-counts div { border-radius: 8px; padding: 6px 4px; text-align: center; font-size: 12px; color: var(--muted); }
+.mb-counts b { display: block; font-size: 20px; line-height: 1.1; }
+.mb-counts .n { background: var(--new-soft); } .mb-counts .n b { color: var(--new); }
+.mb-counts .c { background: var(--chg-soft); } .mb-counts .c b { color: var(--chg); }
+.mb-counts .g { background: var(--gone-soft); } .mb-counts .g b { color: var(--gone); }
+.mb-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.mb-nav span { flex: 1; text-align: center; font-weight: 700; }
+.btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 7px;
+  padding: 4px 10px; font-size: 13px; }
+.btn.primary { background: var(--pin); border-color: var(--pin); color: #fff; }
+.mb-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.mb-list li { display: flex; gap: 8px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.mb-list li.cur { font-weight: 700; }
+.dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 5px; flex: none; }
+.dot.new { background: var(--new); } .dot.chg { background: var(--chg); } .dot.gone { background: var(--gone); }
+.mb-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+</head>
+<body>
+<main>
+
+<div class="kicker">docpin · spec · 2026-10-12</div>
+<h1>Mettre en avant ce qui a changé depuis ton dernier envoi</h1>
+<p class="lede">Quand une session met à jour un document que tu as déjà lu et annoté, la page compare la
+version que tu avais au moment du dernier « Send to session » à celle du disque. Le nouveau ressort, le
+déjà-lu se replie sans disparaître.</p>
+
+<div class="tiles">
+  <div class="tile" style="--c: var(--pin)"><b>Référence : ton dernier envoi</b><span>copie du document prise au moment où les notes partent</span></div>
+  <div class="tile" style="--c: var(--new)"><b>Le nouveau d'abord</b><span>surligné, étiqueté, compté, et parcouru par ▲ ▼</span></div>
+  <div class="tile" style="--c: var(--done)"><b>Le déjà-lu replié</b><span>une ligne par section inchangée, jamais supprimée</span></div>
+  <div class="tile" style="--c: var(--chg)"><b>0 octet à côté du document</b><span>la copie vit dans le dossier de données de docpin</span></div>
+</div>
+
+<h2 id="besoin">1 · Le besoin, et ce qui est décidé</h2>
+<blockquote>« quand tu mets à jour un doc avec de nouveaux éléments il faut trouver un moyen ergonomique et
+joli de cacher ce que j'avais déjà lu et traité, ou au moins mettre en avant l'update. ou les 2. »<br>
+« c'est le cœur de l'évol […] il faut garder les 2 mais bien mettre en avant le nouveau contenu. »</blockquote>
+<div class="scroll"><table>
+<thead><tr><th>Question</th><th>Décision</th><th>Pourquoi</th></tr></thead>
+<tbody>
+<tr><td>Par rapport à quoi « nouveau » ?</td><td><span class="dec">le dernier « Send to session »</span></td><td>c'est l'instant où tu as fini de lire et de répondre : ce qui vient après est, par définition, ce que tu n'as pas vu</td></tr>
+<tr><td>Cacher ou mettre en avant ?</td><td><span class="dec">les deux, le nouveau d'abord</span></td><td>tes mots ; replier sans mettre en avant laisserait chercher, mettre en avant sans replier laisserait défiler</td></tr>
+<tr><td>Où se fait la comparaison ?</td><td><span class="dec">copie au moment de l'envoi, comparaison dans le navigateur</span> (approche 1)</td><td>le démon reste en bibliothèque standard ; le navigateur sait déjà lire du HTML, et c'est lui qui affiche</td></tr>
+</tbody></table></div>
+
+<h2 id="maquette">2 · Ce que tu verras</h2>
+<figure>
+<div class="mock" role="img" aria-label="Maquette : un document mis à jour, une section inchangée repliée, un paragraphe nouveau en vert, un paragraphe modifié en bleu avec le mot changé souligné, un passage retiré signalé en rouge, et le panneau Changes dans la barre de droite">
+  <div class="mock-chrome"><i></i><i></i><i></i>&nbsp;127.0.0.1:8765/docs/3f9a…</div>
+  <div class="mock-body">
+    <div class="mock-doc">
+      <h4>1 · Le contexte</h4>
+      <div class="m-fold">▸ <b>Already read · unchanged</b> 6 blocks · 2 treated notes <u>Show</u></div>
+      <h4>2 · Les options</h4>
+      <p class="m-dim">Trois options ont été comparées sur le coût, le délai et la réversibilité.<span class="m-pin done">✓3</span></p>
+      <p class="m-new"><span class="gut new">NEW</span>Une quatrième option, demandée dans ta note 3 : garder l'ancien format en lecture seule pendant un mois.</p>
+      <p class="m-chg"><span class="gut chg">CHANGED</span>La migration prend <mark>deux jours</mark> au lieu d'une semaine, mesurée sur la copie de test.</p>
+      <span class="m-removed">− 1 removed · view</span>
+      <div class="m-old">L'option C exige un serveur supplémentaire.</div>
+      <h4>3 · La décision</h4>
+      <div class="m-fold">▸ <b>Already read · unchanged</b> 3 blocks <u>Show</u></div>
+      <p>Une note nouvelle, posée sur cette version :<span class="m-pin live">4</span></p>
+    </div>
+    <div class="mock-bar">
+      <div class="mb-head">Changes since your last send</div>
+      <div class="mb-when">sent Oct 12, 10:42</div>
+      <div class="mb-counts"><div class="n"><b>1</b>new</div><div class="c"><b>1</b>changed</div><div class="g"><b>1</b>removed</div></div>
+      <div class="mb-nav"><button class="btn">▲</button><span>1 / 3</span><button class="btn">▼</button></div>
+      <ul class="mb-list">
+        <li class="cur"><i class="dot new"></i>2 · Une quatrième option, demandée…</li>
+        <li><i class="dot chg"></i>2 · La migration prend deux jours…</li>
+        <li><i class="dot gone"></i>2 · L'option C exige un serveur…</li>
+      </ul>
+      <div class="mb-actions"><button class="btn">Show everything</button><button class="btn primary">Mark as read</button></div>
+    </div>
+  </div>
+</div>
+<figcaption>Maquette en HTML, avec les couleurs proposées (claires et sombres). Les libellés sont en
+anglais, comme tout l'overlay (<code>CLAUDE.md</code>, § Langue).</figcaption>
+</figure>
+
+<div class="scroll"><table>
+<thead><tr><th>Élément</th><th>Rendu</th><th>Geste</th></tr></thead>
+<tbody>
+<tr><td><span class="tag new">NEW</span> bloc nouveau</td><td>fond vert léger, barre verte à gauche, étiquette en onglet sur son bord haut (elle tient même sans marge)</td><td>—</td></tr>
+<tr><td><span class="tag chg">CHANGED</span> bloc modifié</td><td>fond bleu léger, barre bleue ; les <b>mots</b> changés soulignés</td><td>survol de l'étiquette : l'ancien texte, barré</td></tr>
+<tr><td><span class="tag gone">− removed</span> passage retiré</td><td>une pastille rouge à l'endroit où il était</td><td>clic : l'ancien texte, barré, en dessous</td></tr>
+<tr><td>section inchangée</td><td>titre visible, contenu remplacé par une ligne « Already read · unchanged », avec le nombre de blocs et de notes traitées</td><td>« Show » la déplie</td></tr>
+<tr><td>bloc inchangé d'une section qui a changé</td><td>atténué (opacité 0,5), net au survol</td><td>—</td></tr>
+<tr><td>note déjà envoyée</td><td>épingle grise, plus petite, marquée ✓</td><td>clic : la note, en lecture seule (comme aujourd'hui)</td></tr>
+<tr><td>panneau « Changes »</td><td>en tête de la barre : compteurs, ▲ n / N ▼, liste cliquable</td><td>« Show everything » déplie tout et retire l'atténuation ; « Mark as read » fait de la version affichée la nouvelle référence</td></tr>
+</tbody></table></div>
+
+<h2 id="cycle">3 · La vie de la référence</h2>
+<figure>
+<svg class="fig" viewBox="0 0 960 310" role="img" aria-labelledby="cy-t">
+  <title id="cy-t">Cycle de la référence : aucune, puis la copie prise à l'envoi, comparée tant que la session corrige, remplacée par un nouvel envoi ou par Mark as read</title>
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+  <rect x="20" y="96" width="190" height="88" rx="12" class="box"/>
+  <text x="40" y="128" class="tb">Aucune référence</text>
+  <text x="40" y="153" class="tm">la page s'affiche</text>
+  <text x="40" y="172" class="tm">comme aujourd'hui</text>
+  <path d="M210,140 H300" class="arr" marker-end="url(#ar)"/>
+  <text x="222" y="128" class="t" style="fill: var(--pin); font-weight: 700">Send</text>
+  <rect x="304" y="78" width="270" height="124" rx="12" class="box" style="stroke: var(--pin); stroke-width: 2.5"/>
+  <text x="324" y="110" class="tb">Référence = le fichier</text>
+  <text x="324" y="131" class="tb">au moment de l'envoi</text>
+  <text x="324" y="158" class="tm">baselines/&lt;id&gt;.html,</text>
+  <text x="324" y="178" class="tm">une seule, remplacée</text>
+  <path d="M574,140 H664" class="arr" marker-end="url(#ar)"/>
+  <text x="584" y="128" class="tm">la session</text>
+  <text x="584" y="168" class="tm">corrige</text>
+  <rect x="668" y="78" width="272" height="124" rx="12" class="box" style="stroke: var(--new); stroke-width: 2.5"/>
+  <text x="688" y="110" class="tb">La page compare</text>
+  <text x="688" y="135" class="t">référence ↔ disque</text>
+  <text x="688" y="160" class="tm">nouveau mis en avant,</text>
+  <text x="688" y="180" class="tm">déjà-lu replié</text>
+  <path d="M804,202 V292 H439 V206" class="arr" marker-end="url(#ar)"/>
+  <text x="458" y="240" class="t" style="font-weight: 700">Send (nouvelles notes) ou Mark as read</text>
+  <text x="458" y="262" class="tm">la version affichée devient la référence</text>
+  <text x="304" y="54" class="tm">une erreur d'écriture retire la référence : plutôt rien que faux</text>
+</svg>
+<figcaption>La référence avance à chaque envoi, et seulement là, ou quand tu dis « Mark as read ».</figcaption>
+</figure>
+
+<div class="scroll"><table>
+<thead><tr><th>Événement</th><th>Effet sur la référence</th></tr></thead>
+<tbody>
+<tr><td>« Send to session », « New session », pastille, <code>annotate send</code> — par la session qui attend, la boîte de réception ou l'onglet</td><td>copie du fichier tel qu'il est à cet instant, prise dans <code>Sender._settle</code> : c'est le seul endroit où des notes deviennent envoyées, donc le seul chemin à couvrir</td></tr>
+<tr><td>envoi refusé ou défait (rien à envoyer, onglet qui ne s'ouvre pas)</td><td>aucun : l'ancienne référence reste</td></tr>
+<tr><td>écriture de la copie impossible, ou fichier disparu</td><td>l'ancienne référence est <b>supprimée</b> : comparer à une version plus ancienne marquerait comme nouveau ce que tu as déjà lu</td></tr>
+<tr><td>« Mark as read »</td><td>copie du fichier actuel, même mécanisme ; la page se recharge sans marques</td></tr>
+<tr><td>« Unmanage », « Delete file »</td><td>la copie est supprimée avec les annotations</td></tr>
+</tbody></table></div>
+
+<h2 id="comparer">4 · Comment la page compare</h2>
+<figure>
+<svg class="fig" viewBox="0 0 960 330" role="img" aria-labelledby="cmp-t">
+  <title id="cmp-t">Les blocs de la référence et ceux du fichier actuel, appariés par leur texte : les blocs identiques se relient, un bloc sans partenaire est nouveau ou retiré, un retiré et un nouveau voisins et proches deviennent un modifié</title>
+  <text x="40" y="30" class="tb">Référence (dernier envoi)</text>
+  <text x="600" y="30" class="tb">Fichier actuel</text>
+  <g>
+    <rect x="40" y="48" width="320" height="40" rx="8" class="box"/><text x="56" y="74" class="t">h2 · Les options</text>
+    <rect x="40" y="98" width="320" height="40" rx="8" class="box"/><text x="56" y="124" class="t">p · Trois options ont été…</text>
+    <rect x="40" y="148" width="320" height="40" rx="8" class="box" style="stroke: var(--chg)"/><text x="56" y="174" class="t">p · La migration prend une semaine…</text>
+    <rect x="40" y="198" width="320" height="40" rx="8" class="box" style="stroke: var(--gone); fill: var(--gone-soft)"/><text x="56" y="224" class="t">p · L'option C exige…</text>
+    <rect x="40" y="248" width="320" height="40" rx="8" class="box"/><text x="56" y="274" class="t">h2 · La décision</text>
+  </g>
+  <g>
+    <rect x="600" y="48" width="320" height="40" rx="8" class="box"/><text x="616" y="74" class="t">h2 · Les options</text>
+    <rect x="600" y="98" width="320" height="40" rx="8" class="box"/><text x="616" y="124" class="t">p · Trois options ont été…</text>
+    <rect x="600" y="148" width="320" height="40" rx="8" class="box" style="stroke: var(--new); fill: var(--new-soft)"/><text x="616" y="174" class="t">p · Une quatrième option…</text>
+    <rect x="600" y="198" width="320" height="40" rx="8" class="box" style="stroke: var(--chg); fill: var(--chg-soft)"/><text x="616" y="224" class="t">p · La migration prend deux jours…</text>
+    <rect x="600" y="248" width="320" height="40" rx="8" class="box"/><text x="616" y="274" class="t">h2 · La décision</text>
+  </g>
+  <path d="M360,68 H600" class="arr"/><path d="M360,118 H600" class="arr"/><path d="M360,268 H600" class="arr"/>
+  <path d="M360,168 C480,168 480,218 600,218" class="arr" style="stroke: var(--chg); stroke-dasharray: 6 5"/>
+  <text x="430" y="160" class="tm" style="fill: var(--chg)">proche : modifié</text>
+  <text x="376" y="246" class="tm" style="fill: var(--gone)">sans partenaire : retiré</text>
+  <text x="600" y="312" class="tm" style="fill: var(--new)">sans partenaire : nouveau</text>
+  <text x="40" y="312" class="tm">trait plein : même texte, inchangé</text>
+</svg>
+<figcaption>Les deux versions sont découpées en blocs, et les blocs appariés par leur texte, comme <code>git diff</code> apparie des lignes.</figcaption>
+</figure>
+
+<div class="scroll"><table>
+<thead><tr><th>Étape</th><th>Règle</th></tr></thead>
+<tbody>
+<tr><td>1. Lire les deux versions</td><td>un seul appel rend la référence <b>et</b> le fichier actuel, bruts ; les deux sont lus par <code>DOMParser</code>, qui n'exécute aucun script et ne charge aucune image. Comparer source à source rend la comparaison insensible à ce que les scripts du document ajoutent à la page.</td></tr>
+<tr><td>2. Découper en blocs</td><td>bloc = <code>p, li, tr, h1–h6, dt, dd, blockquote, pre, figcaption, caption, summary, div</code>, plus <code>svg</code> (le plus extérieur) et <code>img</code> comme blocs entiers. <b>Chaque texte appartient à un seul bloc, le plus proche</b> : la signature d'un bloc est son texte propre, sans celui des blocs qu'il contient ; un bloc à signature vide est ignoré.</td></tr>
+<tr><td>3. Signature d'une figure</td><td><code>svg</code> : son balisage, espaces normalisés (une couleur changée compte) ; <code>img</code> : <code>src</code> et <code>alt</code></td></tr>
+<tr><td>4. Apparier</td><td>diff de Myers (celui de git) sur les suites de signatures</td></tr>
+<tr><td>5. Modifié ou nouveau ?</td><td>dans une même brèche entre deux blocs appariés, chaque retiré, dans l'ordre, s'apparie au premier nouveau qui suit le dernier apparié et partage au moins la moitié de ses mots (Jaccard ≥ 0,5) : c'est un <span class="tag chg">CHANGED</span>, dont les mots ajoutés se soulignent ; sinon <span class="tag new">NEW</span> et <span class="tag gone">− removed</span></td></tr>
+<tr><td>6. Retrouver le bloc dans la page</td><td>chaque bloc du fichier actuel porte son chemin (le même calcul que les ancres des épingles) ; la page le résout et vérifie que le texte propre est le même. Un bloc introuvable ne reçoit pas de marque, et le panneau dit « 1 change not located »</td></tr>
+<tr><td>7. Au-delà de 2 000 différences</td><td>la page renonce et le dit (« Too many changes to compare ») : aucune marque plutôt que des marques douteuses</td></tr>
+</tbody></table></div>
+
+<details><summary>Pourquoi des blocs au texte propre, et pas simplement les feuilles</summary>
+<div class="scroll"><table>
+<thead><tr><th>Cas</th><th>Feuilles seulement</th><th>Texte propre (retenu)</th></tr></thead>
+<tbody>
+<tr><td><code>&lt;li&gt;Intro &lt;ul&gt;&lt;li&gt;a&lt;/li&gt;&lt;/ul&gt;&lt;/li&gt;</code>, « Intro » change</td><td>✗ le <code>li</code> parent n'est pas une feuille : changement invisible</td><td>✓ « Intro » est le texte propre du parent : marqué</td></tr>
+<tr><td><code>&lt;div class="verdict"&gt;</code> avec son texte en direct</td><td>✗ ignoré si ce n'est pas une balise de bloc</td><td>✓ <code>div</code> est un bloc ; un <code>div</code> qui ne fait qu'envelopper a une signature vide et s'ignore</td></tr>
+<tr><td>cellule <code>td</code> modifiée</td><td>la cellule seule</td><td>la ligne <code>tr</code> entière : l'unité de lecture d'un tableau</td></tr>
+</tbody></table></div>
+</details>
+
+<h2 id="replier">5 · Ce qui se replie, et ce qui ne se replie jamais</h2>
+<div class="scroll"><table>
+<thead><tr><th>Cas</th><th>Repliée ?</th></tr></thead>
+<tbody>
+<tr><td>section sans aucun bloc nouveau, modifié ou retiré</td><td>✓ oui : le titre reste, le contenu devient une ligne « Already read · unchanged »</td></tr>
+<tr><td>section qui contient une note <b>pas encore envoyée</b></td><td>✗ jamais : une note en cours se voit</td></tr>
+<tr><td>section qui contient une modification</td><td>✗ ouverte ; ses blocs inchangés s'atténuent, sauf un bloc qui en contient un modifié (l'opacité se transmettrait au nouveau)</td></tr>
+<tr><td>ce qui précède le premier titre (chapeau, tuiles)</td><td>✗ jamais : c'est le résumé du document</td></tr>
+<tr><td>document sans titre répété</td><td>rien ne se replie ; les marques restent</td></tr>
+<tr><td>lien <code>#ancre</code> vers une section repliée, ou ▲ ▼ vers un bloc qu'elle contient</td><td>la section se déplie d'abord</td></tr>
+</tbody></table></div>
+<p>Une section est délimitée par les titres du niveau le plus haut qui revient au moins deux fois
+(<code>h2</code> en général) : du titre jusqu'au titre suivant de même niveau ou plus haut, parmi ses frères.
+Un document fait de <code>&lt;section&gt;</code> donne le même découpage.</p>
+
+<h2 id="ancres">6 · Ne rien déplacer sous les épingles</h2>
+<figure>
+<svg class="fig" viewBox="0 0 960 200" role="img" aria-labelledby="an-t">
+  <title id="an-t">Une épingle est ancrée par un chemin comme body > main > p:nth-of-type(4) ; insérer un div ou un p décale ce chemin, une balise propre à docpin ou une classe ne le décalent pas</title>
+  <rect x="20" y="20" width="440" height="160" rx="12" class="box" style="stroke: var(--gone)"/>
+  <text x="40" y="52" class="tb" style="fill: var(--gone)">✗ insérer un &lt;div&gt; ou envelopper</text>
+  <text x="40" y="84" class="t">ancre : main &gt; div:nth-of-type(3)</text>
+  <text x="40" y="112" class="t">un div inséré avant elle →</text>
+  <text x="40" y="140" class="t">elle désigne le bloc d'à côté</text>
+  <text x="40" y="164" class="tm">la note se poserait au mauvais endroit</text>
+  <rect x="500" y="20" width="440" height="160" rx="12" class="box" style="stroke: var(--new)"/>
+  <text x="520" y="52" class="tb" style="fill: var(--new)">✓ ce que docpin s'autorise</text>
+  <text x="520" y="84" class="t">des classes annotate-* sur les blocs</text>
+  <text x="520" y="112" class="t">un seul élément &lt;annotate-fold&gt;</text>
+  <text x="520" y="140" class="t">étiquettes et pastilles : dans l'overlay</text>
+  <text x="520" y="164" class="tm">nth-of-type ne compte que les balises du même nom</text>
+</svg>
+</figure>
+<p>Les épingles s'ancrent par un chemin en <code>nth-of-type</code> (<code>selectorFor</code>). La page ne
+reçoit donc que des classes, et une seule balise à elle, <code>&lt;annotate-fold&gt;</code>, qui ne décale
+aucun <code>div</code> ni <code>p</code>. Étiquettes, pastilles « removed » et ancien texte vivent dans la couche de
+l'overlay, comme les épingles. Les mots soulignés passent par la CSS Custom Highlight API, qui ne touche
+pas au DOM ; sans elle, le bloc reste marqué, sans les mots.</p>
+
+<h2 id="stockage">7 · Stockage et API</h2>
+<div class="scroll"><table>
+<thead><tr><th>Quoi</th><th>Où, ou quelle route</th><th>Garde</th></tr></thead>
+<tbody>
+<tr><td>la copie de référence</td><td><code>~/.local/share/annotate/baselines/&lt;id&gt;.html</code>, écrite atomiquement ; <code>baseline_at</code> dans l'entrée du registre</td><td>jamais à côté du document (même invariant que les annotations)</td></tr>
+<tr><td>lire les deux versions</td><td><code>GET /api/docs/&lt;id&gt;/baseline</code> → <code>{reference, current, at}</code> ; 404 sans référence</td><td>lecture : <code>Host</code> local, comme le reste</td></tr>
+<tr><td>« Mark as read »</td><td><code>POST /api/docs/&lt;id&gt;/baseline</code></td><td><code>X-Annotate</code> et origine locale, comme toute écriture</td></tr>
+<tr><td>prise à l'envoi</td><td><code>Sender._settle</code>, avant de marquer les notes envoyées</td><td>un échec n'annule pas l'envoi (les notes sont déjà parties) : il retire la référence et l'écrit dans <code>last_error</code></td></tr>
+</tbody></table></div>
+
+<h2 id="limites">8 · Limites connues, dites dans la page</h2>
+<div class="scroll"><table>
+<thead><tr><th>Cas</th><th>Ce qui se passe</th></tr></thead>
+<tbody>
+<tr><td>PNG refait sous le même nom</td><td>non détecté : <code>src</code> et <code>alt</code> identiques. Comparer les octets des images est hors périmètre</td></tr>
+<tr><td>changement de style seul (CSS, classes)</td><td>non signalé, volontairement : on compare ce qui se lit</td></tr>
+<tr><td>bloc déplacé</td><td>un « removed » là où il était, un « new » là où il est</td></tr>
+<tr><td>document réécrit de fond en comble</td><td>presque tout est nouveau, rien ne se replie : juste, et le panneau le montre</td></tr>
+<tr><td>fichier changé pendant que la page est ouverte</td><td>le bouton « Reload » existant ; la comparaison se refait au rechargement</td></tr>
+</tbody></table></div>
+
+<h2 id="tests">9 · Ce qui le tiendra</h2>
+<div class="scroll"><table>
+<thead><tr><th>Propriété</th><th>Test</th></tr></thead>
+<tbody>
+<tr><td>un envoi copie le fichier tel qu'il est à cet instant ; une correction ultérieure ne touche pas la copie</td><td>Python, serveur et <code>sender</code></td></tr>
+<tr><td>trois envois successifs : une seule copie, celle du dernier</td><td>Python (trois itérations, règle des tests)</td></tr>
+<tr><td>un envoi refusé garde l'ancienne copie ; une copie impossible à écrire la retire</td><td>Python, appelé deux fois</td></tr>
+<tr><td>la copie ne vit jamais à côté du document ; « Unmanage » la supprime</td><td>Python</td></tr>
+<tr><td>« Mark as read » exige <code>X-Annotate</code></td><td>Python</td></tr>
+<tr><td><b>témoin</b> : référence identique au fichier → zéro marque, rien de replié</td><td>navigateur</td></tr>
+<tr><td>un ajout, une modification, un retrait → exactement 1 + 1 + 1 marques, aux bons blocs</td><td>navigateur</td></tr>
+<tr><td>la section inchangée se replie, titre visible ; celle qui porte une note non envoyée ne se replie pas</td><td>navigateur</td></tr>
+<tr><td>▲ ▼ parcourt les trois changements et reboucle (trois tours)</td><td>navigateur</td></tr>
+<tr><td>une épingle garde son bloc après repli et dépliage ; une note posée pendant le repli s'ancre au bon bloc</td><td>navigateur</td></tr>
+<tr><td>« Mark as read » puis rechargement → aucune marque</td><td>navigateur</td></tr>
+</tbody></table></div>
+<p>Mutations ajoutées à <code>tools/mutate.py</code> : copie non prise à l'envoi, seuil de Jaccard ignoré,
+repli qui ne regarde pas les notes non envoyées, marque posée sans vérifier le texte propre. Chacune doit
+faire tomber la suite. Les invariants rejoignent la table de <code>CLAUDE.md</code>.</p>
+
+<h2 id="hors">10 · Hors périmètre</h2>
+<div class="scroll"><table>
+<thead><tr><th>Idée</th><th>Pourquoi pas maintenant</th></tr></thead>
+<tbody>
+<tr><td>compter les changements sur la page d'accueil</td><td>il faudrait comparer du HTML côté démon, donc un analyseur en Python ; le statut « answered » dit déjà qu'il y a du neuf</td></tr>
+<tr><td>historique de toutes les versions</td><td>une seule référence répond au besoin ; un historique est un autre outil</td></tr>
+<tr><td>« Renvoyer » des notes (<code>unmark_sent</code>)</td><td>sujet distinct, déjà prévu pour la boîte de réception</td></tr>
+</tbody></table></div>
+
+</main>
+</body>
+</html>
