@@ -89,10 +89,30 @@ def install(package: Path) -> Path:
                 if not (target / "annotate" / "cli.py").is_file():
                     raise
         _point_current(stamp)
+        _place_tray_script(target / "annotate")
         _prune(keep=stamp)
     except OSError as exc:
         raise LaunchError(f"cannot install the code under {runtime_dir()}: {exc}") from exc
     return target
+
+
+def tray_script() -> Path:
+    """The Windows icon's script as a plain file: the Startup shortcut keeps
+    its path for good. Measured on 2026-10-12: Windows sees `current` through
+    `wsl.localhost` as a reparse point and does not traverse it, and a
+    dated copy is pruned KEEP versions later."""
+    return runtime_dir() / "tray.ps1"
+
+
+def _place_tray_script(package: Path) -> None:
+    source = package / "windows" / "tray.ps1"
+    target = tray_script()
+    data = source.read_bytes()
+    if target.is_file() and target.read_bytes() == data:
+        return
+    temporary = runtime_dir() / f".tray-{uuid.uuid4().hex[:8]}.ps1"
+    temporary.write_bytes(data)
+    os.replace(temporary, target)
 
 
 def _point_current(stamp: str) -> None:
@@ -122,9 +142,9 @@ def watched(code_dir: Path) -> Path:
 
 
 def stable(code_dir: Path) -> Path:
-    """The name of `code_dir` that survives an update: `current/annotate`
-    when it is a copy (whose dated folder is pruned KEEP versions later),
-    else `code_dir` itself."""
+    """The name of `code_dir` that survives an update, for Linux: `current/
+    annotate` when it is a copy (whose dated folder is pruned KEEP versions
+    later), else `code_dir` itself. Windows does not follow it (tray_script)."""
     try:
         code_dir.resolve().relative_to(runtime_dir().resolve())
     except ValueError:

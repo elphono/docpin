@@ -276,26 +276,35 @@ def test_the_launcher_starts_the_daemon_only_for_commands_that_need_it(
     assert started == ([config.DEFAULT_PORT] if starts else [])
 
 
-def test_the_tray_shortcut_names_the_stable_copy_never_a_dated_one(monkeypatch):
-    """The Startup shortcut outlives every update: made from a dated copy, it
-    would point at a folder pruned three versions later."""
+def test_the_tray_shortcut_names_a_plain_file_that_every_install_refreshes(tmp_path,
+                                                                          monkeypatch):
+    """The Startup shortcut outlives every update. A dated copy is pruned
+    three versions later, and Windows does not traverse `current` (measured:
+    a reparse point through wsl.localhost): the shortcut names a plain file."""
     from annotate import tray
     runtime.install(ROOT / "src" / "annotate")
     dated = runtime.current().resolve() / "annotate"            # what __file__ resolves to
-    assert dated.parent.name != "current"
-    stable = runtime.current() / "annotate" / "windows" / "tray.ps1"
-    assert tray.script(dated) == stable and stable.is_file()
-    named: list[Path] = []
+    script = tray.script(dated)
+    assert script == runtime.tray_script()
+    assert script.resolve() == script                          # no symlink on the way
+    assert script.read_bytes() == (ROOT / "src" / "annotate" / "windows" / "tray.ps1").read_bytes()
+    named: list[str] = []
 
-    def windows_path(path: Path) -> str:
+    def windows_path(path: Path) -> str:                        # wslpath -w resolves links
         assert isinstance(path, Path)
-        named.append(path)
+        named.append(str(path.resolve()))
         return r"\\wsl.localhost\D\tray.ps1"
     monkeypatch.setattr(tray, "CODE_DIR", dated)
     monkeypatch.setattr(tray, "windows_path", windows_path)
     monkeypatch.setenv("WSL_DISTRO_NAME", "D")
     tray.shortcut_script(8765)
-    assert named == [stable]
+    assert named == [str(script)]
+    # A new version brings its own script: the same file carries it.
+    launcher = plugin_version(tmp_path, "v2", "next release")
+    new_ps1 = launcher.parent.parent / "src" / "annotate" / "windows" / "tray.ps1"
+    new_ps1.write_text(new_ps1.read_text(encoding="utf-8") + "\n# v2\n", encoding="utf-8")
+    runtime.install(launcher.parent.parent / "src" / "annotate")
+    assert script.read_text(encoding="utf-8").endswith("# v2\n")
     # A clone names its own file, as before the plugin.
     clone = ROOT / "src" / "annotate"
     assert tray.script(clone) == clone / "windows" / "tray.ps1"

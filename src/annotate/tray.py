@@ -31,9 +31,12 @@ SCRIPT = CODE_DIR / "windows" / "tray.ps1"
 
 
 def script(code_dir: Path) -> Path:
-    """tray.ps1 under the name that outlives an update: the Startup shortcut
-    keeps it for good."""
-    return runtime.stable(code_dir) / "windows" / "tray.ps1"
+    """tray.ps1 under a path that outlives an update, since the Startup
+    shortcut keeps it for good: a clone's own file, or, from a copy, the plain
+    file every install refreshes (runtime.tray_script)."""
+    if runtime.stable(code_dir) == code_dir:
+        return code_dir / "windows" / "tray.ps1"
+    return runtime.tray_script()
 
 
 SHORTCUT_NAME = "annotate-tray.lnk"

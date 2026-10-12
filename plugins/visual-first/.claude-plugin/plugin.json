@@ -1,7 +1,7 @@
 {
   "name": "visual-first",
   "displayName": "Visual first",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "An output style that draws before it writes, and a check that every document a session delivers is a self-contained HTML page with visuals",
   "author": {"name": "elphono", "url": "https://github.com/elphono"},
   "homepage": "https://github.com/elphono/docpin",
