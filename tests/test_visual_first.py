@@ -55,6 +55,7 @@ def fake_docpin(tmp_path: Path, code: int) -> Path:
     ("src/page.html", False),
     ("docs/README.md", False),
     ("docs/plans/next.md", False),
+    ("docs/brouillons/idee.md", False),
     ("docs/figures/hero/tpl.html", False),
     ("node_modules/pkg/docs/a.html", False),
     ("docs/data.json", False),

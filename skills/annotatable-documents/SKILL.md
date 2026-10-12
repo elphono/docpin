@@ -28,6 +28,8 @@ this skill is about producing documents that are worth annotating, and closing t
   selector at the top, or `<details>` blocks. A one-off note does not need it.
 - **Blocks the user can point at**: short paragraphs, list items, table rows and headings.
   A note anchors on the block it was pinned to; a wall of text gets one vague note.
+- **Longer than one screen?** Open with a visual summary: tiles for the numbers that matter,
+  or one overview diagram.
 - End with what the user has to decide or do, if anything.
 
 ## Hand it over

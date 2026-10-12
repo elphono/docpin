@@ -40,8 +40,9 @@ TOOLS = {"Write", "Edit", "MultiEdit"}
 SUFFIXES = {".md", ".html"}
 EXCLUDED_NAMES = {"README.md", "CHANGELOG.md", "CONTRIBUTING.md", "CLAUDE.md", "AGENTS.md",
                   "LICENSE.md", "SKILL.md"}
+# Working notes are Markdown on purpose ("brouillons": the same, in French).
 EXCLUDED_FOLDERS = {"node_modules", ".venv", "venv", "site-packages", ".git", "__pycache__",
-                    "plans", "drafts", "figures"}
+                    "plans", "drafts", "brouillons", "figures"}
 PROSE_PER_VISUAL = 4
 IMAGE_MAX_BYTES = 1_000_000
 
