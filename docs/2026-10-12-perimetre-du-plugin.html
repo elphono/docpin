@@ -117,10 +117,10 @@ body[data-level="1"] .l2 { display: none !important; }
 </head>
 <body data-level="2">
 <main>
-<p class="lede">docpin · page de périmètre du 2026-10-12, tirée des décisions de <a href="empaqueter-le-workflow.html">Empaqueter le workflow</a> · rien n'est construit</p>
-<h1>Ce que le plugin public construira</h1>
-<p class="lede">Les décisions du 2026-10-09 traduites en pièces, en lots et en preuves, pour valider le périmètre
-avant d'écrire une ligne.</p>
+<p class="lede">docpin · page de périmètre du 2026-10-12, tirée des décisions de <a href="empaqueter-le-workflow.html">Empaqueter le workflow</a> · <strong>construit et publié le même jour, en 0.3.3</strong></p>
+<h1>Le plugin public : ce qui a été construit</h1>
+<p class="lede">Les décisions du 2026-10-09 traduites en pièces, en lots et en preuves. Écrite avant le code ;
+mise à jour après, avec ce que les mesures ont changé.</p>
 
 <div class="levels" role="group" aria-label="Profondeur de lecture">
   <span>Profondeur :</span>
@@ -130,6 +130,7 @@ avant d'écrire une ligne.</p>
 </div>
 
 <nav class="toc">
+  <a href="#livre">Livré</a>
   <a href="#installer">1 · Installer</a>
   <a href="#depot">2 · Le dépôt</a>
   <a href="#demon">3 · Le démon</a>
@@ -139,23 +140,51 @@ avant d'écrire une ligne.</p>
   <a href="#suppose">7 · Supposé</a>
 </nav>
 
-<div class="verdict"><strong>En une phrase :</strong> le dépôt docpin devient une marketplace de deux plugins,
-<strong>docpin</strong> (la boucle et un skill) et <strong>la forme visuelle</strong> (le style et le contrôleur de
-documents, optionnel). Le travail se découpe en sept lots, dont le premier ne construit rien : il mesure les cinq
-choses que ce plan suppose sur les plugins. Deux choix te reviennent ; le reste découle de tes décisions.</div>
+<div class="verdict"><strong>En une phrase :</strong> le dépôt docpin est une marketplace de deux plugins,
+<strong>docpin</strong> (la boucle et un skill) et <strong>visual-first</strong> (le style et le contrôle des documents,
+optionnel), installables en une commande. Les sept lots sont faits, chacun avec sa preuve, et ta config est passée aux
+plugins (A1). Ce que les mesures ont changé au plan est dans le tableau ci-dessous.</div>
 
 <div class="tiles">
   <div class="tile dp"><b>2</b><span>plugins dans une marketplace, le dépôt docpin</span></div>
-  <div class="tile gn"><b>2</b><span>commandes pour installer, au lieu de ≈ 8 gestes</span></div>
-  <div class="tile cl"><b>7</b><span>lots, chacun avec sa preuve</span></div>
-  <div class="tile un"><b>5</b><span>suppositions que le lot 0 mesure d'abord</span></div>
-  <div class="tile ad"><b>2</b><span>choix à toi</span></div>
+  <div class="tile gn"><b>1</b><span>commande pour installer, au lieu de ≈ 8 gestes</span></div>
+  <div class="tile cl"><b>7/7</b><span>lots livrés, poussés, prouvés</span></div>
+  <div class="tile gn"><b>5/5</b><span>suppositions mesurées ; 2 ont changé le plan</span></div>
+  <div class="tile gn"><b>17</b><span>mutations nouvelles, toutes tuées</span></div>
 </div>
+
+<h2 id="livre">Livré</h2>
+<table>
+<thead><tr><th>Lot</th><th>Commit</th><th>La preuve, lue</th></tr></thead>
+<tbody>
+<tr><td><span class="tag un">0</span> Mesurer</td><td>—</td><td>plugins jouets dans un <code>CLAUDE_CONFIG_DIR</code> vide, sessions <code>claude -p</code> : les 5 mesures de la <a href="#suppose">section 7</a></td></tr>
+<tr><td><span class="tag dp">1</span> Déraciner</td><td><code>402d77b</code></td><td>15 tests de plateforme ; 3 mutations tuées ; mesuré : parcourir le home prend 33,6 s, d'où la règle « jamais parcouru »</td></tr>
+<tr><td><span class="tag dp">2</span> Empaqueter</td><td><code>839e723</code>, <code>b11db22</code></td><td>installé depuis GitHub dans un home vide : document enregistré, démon démarré tout seul sur la copie stable, page servie ; mise à jour 0.2.0 → 0.3.0, dossier 0.2.0 supprimé, page toujours servie, démon « stale », redémarré sur la nouvelle copie ; 4 mutations tuées</td></tr>
+<tr><td><span class="tag dp">3</span> Skill</td><td><code>3f9d6b6</code></td><td><code>claude plugin eval</code> : 1,00 avec le plugin, 0,00 sans (une exécution par bras, 0,17 $) ; le skill est appelé, le lien est donné</td></tr>
+<tr><td><span class="tag dp">4</span> Garde-fou</td><td><code>82a0b81</code></td><td>un vrai message de Claude Code 2.1.296 capturé dans une boîte témoin : même ligne que docpin ; 4 tests, 2 mutations tuées, bouton regardé dans le navigateur</td></tr>
+<tr><td><span class="tag cl">5</span> Forme visuelle</td><td><code>3eac49c</code>, <code>a973931</code>, <code>71f623d</code></td><td>29 tests, 6 mutations tuées ; installé et essayé : un Markdown sous <code>docs/</code> bloqué, et un dossier suivi dans docpin couvert</td></tr>
+<tr><td><span class="tag gn">6</span> Publier, basculer</td><td><code>aa2bf9c</code>, <code>bdc0528</code> ; config <code>9fab481</code></td><td>tags <code>docpin--v0.3.3</code>, <code>visual-first--v0.3.3</code> ; CI : Claude Code valide la marketplace ; <code>doctor.sh</code> : plugins installés, aucun ancien hook, témoin KO vérifié</td></tr>
+</tbody>
+</table>
+
+<h3>Ce que les mesures ont changé au plan</h3>
+<table>
+<thead><tr><th>Prévu</th><th>Fait</th><th>Pourquoi</th></tr></thead>
+<tbody>
+<tr><td>copie stable sous <code>${CLAUDE_PLUGIN_DATA}</code></td><td>sous <code>~/.local/share/annotate/runtime/</code></td><td>mesuré : les variables <code>CLAUDE_PLUGIN_*</code> n'arrivent pas aux commandes de l'outil Bash, d'où <code>bin/annotate</code> est appelé</td></tr>
+<tr><td>un dialogue d'installation (port, dossiers)</td><td>aucun : <code>config.toml</code> et la page d'accueil, comme avant</td><td>les valeurs de <code>userConfig</code> n'arrivent qu'aux hooks, pas à <code>annotate wait</code> lancé par la session</td></tr>
+<tr><td>poster dans la boîte pour les <em>versions</em> vérifiées</td><td>pour les <em>protocoles</em> vérifiés (<code>peerProtocol</code> 1)</td><td>mesuré sur ta machine : la version a changé 7 fois en 6 jours, le protocole jamais (2.1.121 à 2.1.296)</td></tr>
+<tr><td>le contrôle demande à <code>annotate</code></td><td>par la copie stable de docpin</td><td>mesuré : le <code>bin/</code> d'un plugin n'est pas sur le PATH du hook d'un autre plugin</td></tr>
+<tr><td><code>--strict</code> dans la CI</td><td>rapport JSON, seul l'avertissement du <code>CLAUDE.md</code> accepté</td><td>le <code>CLAUDE.md</code> à la racine est le guide du dépôt, voulu ; le vérificateur est éprouvé sur un témoin</td></tr>
+<tr><td>— (hors page)</td><td>un Mermaid ne compte plus comme visuel ; une ressource réseau avertit</td><td>l'audit de « Empaqueter le workflow » (section 4) le décidait</td></tr>
+<tr><td>vérificateur de rendu (audit, section 4)</td><td><strong>pas construit</strong></td><td>hors des sept lots ; il demande Playwright déclaré par le plugin. Inscrit au ROADMAP, et <code>plancher-corps.mjs</code> reste en place</td></tr>
+</tbody>
+</table>
 
 <!-- ============================================================ 1 -->
 <h2 id="installer">1 · Ce que vit quelqu'un qui installe</h2>
-<div class="verdict"><strong>Affirmation :</strong> deux commandes, puis rien d'autre à faire tant qu'il
-n'a pas besoin d'un service système. Le démon démarre à la première écriture d'un document.</div>
+<div class="verdict"><strong>Affirmation :</strong> une commande (ou deux), puis rien d'autre à faire tant
+qu'il n'a pas besoin d'un service système. Le démon démarre à la première écriture d'un document.</div>
 
 <figure class="narrowfig">
 <svg viewBox="0 0 520 560" role="img" aria-label="Cinq étapes, de l'installation au retour des notes">
@@ -174,7 +203,7 @@ n'a pas besoin d'un service système. Le démon démarre à la première écritu
   <circle cx="40" cy="152" r="15" fill="var(--gen)"/><text class="bn" x="40" y="157" text-anchor="middle">2</text>
   <text class="s16b" x="66" y="157">Installer docpin</text>
   <text class="s14 mono" x="66" y="182">/plugin install docpin@docpin</text>
-  <text class="s14 mut" x="66" y="204">un dialogue demande le port et les dossiers suivis</text>
+  <text class="s14 mut" x="66" y="204">en une fois : ajouter --marketplace elphono/docpin</text>
   <line class="arr" x1="260" y1="218" x2="260" y2="242" stroke="var(--muted)" marker-end="url(#ah)"/>
   <!-- step 3 -->
   <rect class="box" x="10" y="244" width="500" height="96" rx="10" stroke="var(--claude)"/>
@@ -201,14 +230,14 @@ système (<code>annotate service</code>) reste un geste à part, pour qui veut u
 </figure>
 
 <!-- ============================================================ 2 -->
-<h2 id="depot">2 · Ce que contiendra le dépôt</h2>
+<h2 id="depot">2 · Ce que contient le dépôt</h2>
 <div class="verdict"><strong>Affirmation :</strong> le plugin docpin est la racine du dépôt, parce qu'un plugin
 ne voit que les fichiers de son dossier et que le code Python y est déjà. La forme visuelle vit dans un
 sous-dossier.</div>
 
 <div class="tree" role="img" aria-label="Arborescence du dépôt après le travail">
   <div class="row dp new"><span class="p">.claude-plugin/marketplace.json</span><span class="d">deux entrées : <code>docpin</code> (source <code>./</code>) et la forme visuelle</span></div>
-  <div class="row dp new"><span class="p">.claude-plugin/plugin.json</span><span class="d">manifeste de docpin, avec <code>userConfig</code> : port, dossiers suivis</span></div>
+  <div class="row dp new"><span class="p">.claude-plugin/plugin.json</span><span class="d">manifeste de docpin ; sa version égale celle du paquet, par test</span></div>
   <div class="row dp new"><span class="p">hooks/hooks.json</span><span class="d">branche l'enregistreur sur <code>Write|Edit</code>, par <code>${CLAUDE_PLUGIN_ROOT}</code></span></div>
   <div class="row dp"><span class="p">hooks/register-on-write.py</span><span class="d">l'enregistreur actuel, inchangé sur le fond</span></div>
   <div class="row dp new"><span class="p">bin/annotate</span><span class="d">met <code>annotate</code> sur le PATH des sessions ; lance la copie stable (section 3)</span></div>
@@ -234,7 +263,7 @@ copier <code>tests/</code> et <code>docs/</code> en plus, quelques centaines de 
 <h2 id="demon">3 · Le démon ne tourne jamais depuis le dossier d'une version</h2>
 <div class="verdict"><strong>Affirmation :</strong> à chaque mise à jour, Claude Code installe le plugin dans un
 nouveau dossier et supprime l'ancien 14 jours plus tard. Le démon tourne donc depuis une copie stable, dans le
-dossier de données du plugin ; tes notes, elles, restent où elles sont.</div>
+dossier de données de docpin, à côté de tes notes.</div>
 
 <figure class="narrowfig">
 <svg viewBox="0 0 520 392" role="img" aria-label="Le dossier de version change, la copie stable non">
@@ -251,10 +280,10 @@ dossier de données du plugin ; tes notes, elles, restent où elles sont.</div>
   <line class="arr" x1="385" y1="80" x2="385" y2="150" stroke="var(--muted)" marker-end="url(#ah2)"/>
   <text class="s14 mut" x="372" y="110" text-anchor="end"><tspan class="mono">bin/annotate</tspan> la copie</text>
   <text class="s14 mut" x="372" y="130" text-anchor="end">une fois par version</text>
-  <text class="s16b" x="10" y="174">Dossier de données du plugin</text>
+  <text class="s16b" x="10" y="174">Dossier de données de docpin</text>
   <rect class="box" x="10" y="186" width="500" height="64" rx="8" stroke="var(--docpin)"/>
-  <text class="s14 mono" x="22" y="210">${CLAUDE_PLUGIN_DATA}/runtime/0.2.1/</text>
-  <text class="s14 mut" x="22" y="234">survit aux mises à jour du plugin</text>
+  <text class="s14 mono" x="22" y="210">~/.local/share/annotate/runtime/&lt;empreinte&gt;/</text>
+  <text class="s14 mut" x="22" y="234">survit aux mises à jour et à la désinstallation</text>
   <line class="arr" x1="260" y1="250" x2="260" y2="276" stroke="var(--muted)" marker-end="url(#ah2)"/>
   <rect class="box" x="10" y="278" width="500" height="44" rx="8" stroke="var(--docpin)"/>
   <text class="s15" x="22" y="305">démon et unité systemd : <tspan class="mono">python3 -m annotate.cli</tspan></text>
@@ -266,12 +295,13 @@ code a changé (le contrôle <code>stale</code> existant) et la page propose « 
 bouge pas.</figcaption>
 </figure>
 <div>
-<p><strong>Pourquoi pas le dossier de données pour les notes aussi.</strong> Désinstaller un plugin peut effacer
-son dossier de données ; tes notes et tes copies de référence n'ont pas à partir avec lui. Elles restent sous
-<code>~/.local/share/annotate</code>, là où elles sont aujourd'hui : ton registre actuel continue tel quel.</p>
+<p><strong>Pourquoi pas le dossier de données du plugin.</strong> Prévu ainsi, changé à la mesure : les
+variables <code>CLAUDE_PLUGIN_*</code> n'arrivent pas aux commandes de l'outil Bash, d'où la session appelle
+<code>annotate</code>. Et désinstaller un plugin efface son dossier de données : tes notes n'ont pas à partir avec
+lui. Tout reste sous <code>~/.local/share/annotate</code> ; ton registre a continué tel quel.</p>
 <p><strong>Le démarrage à la demande</strong> (décision Q5) : <code>bin/annotate</code> interroge le port ; si rien
-ne répond, il lance le démon en arrière-plan ; si un démon d'une autre version répond, il le dit au lieu d'en lancer
-un second. Le service systemd reste disponible par <code>annotate service</code>, et il pointe sur la copie stable.</p>
+ne répond, il lance le démon en arrière-plan (par systemd si l'unité existe) ; si un démon répond, il s'en sert,
+et s'il tourne une version plus ancienne, la page propose « Restart daemon ». Le service systemd reste disponible par <code>annotate service</code>, et il pointe sur la copie stable.</p>
 <p class="l2"><strong>Aucune dépendance ajoutée</strong> : la copie est un <code>shutil.copytree</code> de
 <code>src/annotate</code>, lancé avec le <code>python3</code> du système (≥ 3.12, vérifié au démarrage avec un message
 clair s'il manque).</p>
@@ -323,7 +353,7 @@ poussé et prouvé.</div>
   <text class="s14 mut" x="80" y="440">tag, README, ta config passe au plugin (A1)</text>
 </svg>
 <figcaption>Gris pointillé : un lot qui ne laisse aucun code. Orange : plugin docpin. Bleu : plugin de la forme
-visuelle. La flèche pointillée du lot 5 dépend de ton choix C2 : il peut sortir avec la publication ou après.</figcaption>
+visuelle. La flèche pointillée du lot 5 dépendait du choix C2 : il est sorti avec la publication.</figcaption>
 </figure>
 
 <table class="lots">
@@ -341,7 +371,7 @@ ouverture du navigateur par <code>xdg-open</code>, <code>open</code> ou <code>we
 montage WSL marche toujours, vérifié sur un vrai envoi</td></tr>
 <tr><td><span class="tag dp">2</span> Empaqueter</td>
 <td>Manifestes, <code>hooks/hooks.json</code>, <code>bin/annotate</code>, copie stable et démarrage à la demande,
-<code>userConfig</code>. <code>claude plugin validate --strict</code> dans la CI.</td>
+la CI fait valider la marketplace par Claude Code.</td>
 <td>installation dans un home vide, puis passage de 0.2.0 à 0.2.1 et suppression de l'ancien dossier : la page
 est toujours servie, et le bandeau « Restart daemon » apparaît</td></tr>
 <tr><td><span class="tag dp">3</span> Skill</td>
@@ -381,11 +411,12 @@ machines installent le plugin.</td>
 
 <!-- ============================================================ 6 -->
 <h2 id="choix">6 · Tes choix</h2>
-<div class="verdict"><strong>Affirmation :</strong> deux questions seulement ne découlent pas de tes décisions
-du 2026-10-09. Chacune porte une recommandation ; une note sur ce bloc suffit à répondre.</div>
+<div class="verdict"><strong>Affirmation :</strong> deux questions ne découlaient pas de tes décisions du 2026-10-09.
+Tu as demandé qu'on avance sans te les poser : elles sont tranchées comme recommandé pour C1, et dans le sens
+« ensemble » pour C2, puisque la tâche allait jusqu'au bout.</div>
 
-<div class="dec">
-<h3>C1 · Les noms des plugins</h3>
+<div class="dec done">
+<h3>C1 · Les noms des plugins — tranché : <code>docpin</code> et <code>visual-first</code></h3>
 <p>Ils se tapent à l'installation (<code>docpin@docpin</code>) et apparaissent dans <code>/output-style</code>. Le
 document du 2026-10-09 les laissait provisoires.</p>
 <table>
@@ -398,8 +429,8 @@ document du 2026-10-09 les laissait provisoires.</p>
 </table>
 </div>
 
-<div class="dec">
-<h3>C2 · La forme visuelle sort-elle avec docpin ?</h3>
+<div class="dec done">
+<h3>C2 · La forme visuelle sort-elle avec docpin ? — tranché : ensemble, en 0.3</h3>
 <table>
 <thead><tr><th>Option</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
 <tbody>
@@ -413,22 +444,23 @@ document du 2026-10-09 les laissait provisoires.</p>
 
 <div class="dec done">
 <h3>Décidé ici, motif écrit : ta boucle de développement</h3>
-<p>Une fois le plugin installé (A1), c'est lui qui sert tes sessions, pas ton clone. Pour essayer une modification
-avant de la publier : <code>claude --plugin-dir ~/workspace/misc/annotate-workflow</code>, le plugin installé étant
-désactivé pour cette session. Que les deux ne se chargent pas en même temps (sinon chaque écriture serait
-enregistrée deux fois) est la mesure 5 du lot 0.</p>
+<p>Le plugin installé (A1) sert tes sessions, pas ton clone. Pour essayer une modification avant de la publier :
+<code>claude --plugin-dir ~/workspace/misc/annotate-workflow</code>. Mesuré : il remplace le plugin installé pour
+cette session, sans doubler ses hooks. Ton démon systemd, lui, continue de tourner le code du clone : il ne bascule
+pas d'une copie à l'autre à chaque session de développement.</p>
 </div>
 
 <!-- ============================================================ 7 -->
-<h2 id="suppose">7 · Ce que ce plan suppose, et que le lot 0 mesure</h2>
+<h2 id="suppose">7 · Ce que ce plan supposait, et ce que les mesures ont dit</h2>
 <table>
-<thead><tr><th>#</th><th>Supposition</th><th>Statut</th><th>Si elle est fausse</th></tr></thead>
+<thead><tr><th>#</th><th>Supposition</th><th>Mesuré</th><th>Conséquence</th></tr></thead>
 <tbody>
-<tr><td>1</td><td>le <code>bin/</code> d'un plugin est sur le PATH du shell de l'outil Bash</td><td><span class="tag ad">lu</span> doc <code>plugins/components</code></td><td>la consigne garde un chemin absolu, comme aujourd'hui</td></tr>
-<tr><td>2</td><td><code>${CLAUDE_PLUGIN_DATA}</code> survit à une mise à jour du plugin</td><td><span class="tag ad">lu</span> doc <code>plugins/loading</code></td><td>la copie stable va sous <code>~/.local/share/annotate/runtime/</code></td></tr>
-<tr><td>3</td><td>les hooks d'un plugin se déclenchent sur les écritures d'un sous-agent</td><td><span class="tag ow">non mesuré</span></td><td>le parcours du démon, toutes les 30 s, rattrape déjà ces fichiers</td></tr>
-<tr><td>4</td><td>un plugin racine peut contenir le dossier d'un autre plugin de la même marketplace</td><td><span class="tag ow">non mesuré</span></td><td>la forme visuelle part dans un dépôt à elle</td></tr>
-<tr><td>5</td><td><code>--plugin-dir</code> sur un plugin déjà installé ne charge pas ses hooks deux fois</td><td><span class="tag ow">non mesuré</span></td><td>la boucle de développement passe par un <code>CLAUDE_CONFIG_DIR</code> à part</td></tr>
+<tr><td>1</td><td>le <code>bin/</code> d'un plugin est sur le PATH du shell de l'outil Bash</td><td><span class="tag gn">vrai</span> <code>toybin</code> trouvé par la session</td><td>la consigne dit <code>annotate wait</code> sans chemin, quand le lanceur est bien celui du PATH</td></tr>
+<tr><td>2</td><td><code>${CLAUDE_PLUGIN_DATA}</code> survit à une mise à jour du plugin</td><td><span class="tag ad">vrai, mais hors de portée</span> la variable n'arrive pas aux commandes Bash</td><td>la copie stable va sous <code>~/.local/share/annotate/runtime/</code></td></tr>
+<tr><td>3</td><td>les hooks d'un plugin se déclenchent sur les écritures d'un sous-agent</td><td><span class="tag gn">vrai</span> deux écritures, dont une d'un sous-agent : deux appels du hook, même session</td><td>rien à changer</td></tr>
+<tr><td>4</td><td>un plugin racine peut contenir le dossier d'un autre plugin de la même marketplace</td><td><span class="tag gn">vrai</span> les deux installés, depuis un dossier puis depuis GitHub</td><td>rien à changer</td></tr>
+<tr><td>5</td><td><code>--plugin-dir</code> sur un plugin déjà installé ne charge pas ses hooks deux fois</td><td><span class="tag gn">vrai</span> un seul appel du hook, celui du dossier passé en <code>--plugin-dir</code></td><td>la boucle de développement est <code>--plugin-dir</code></td></tr>
+<tr><td>+</td><td>le hook d'un plugin voit le <code>bin/</code> d'un autre plugin</td><td><span class="tag ow">faux</span> le contrôle de visual-first ne trouvait pas <code>annotate</code></td><td>il passe par la copie stable de docpin (0.3.1)</td></tr>
 </tbody>
 </table>
 <details class="proof"><summary>Ce qui a été vérifié pour écrire cette page</summary>
@@ -438,8 +470,9 @@ enregistrée deux fois) est la mesure 5 du lot 0.</p>
 <code>claude --help</code> liste <code>--plugin-dir</code>.</li>
 <li>Les décisions citées (Q1 à Q9, T1 à T4, A1) sont lues dans <code>docs/empaqueter-le-workflow.html</code>,
 section 11, telles que commitées.</li>
-<li>Rien n'a été installé ni essayé : tout ce qui touche au comportement des plugins reste « lu » ou « non mesuré »
-jusqu'au lot 0.</li>
+<li>Mesures faites le 2026-10-12 dans des dossiers de config Claude et des homes vides, sur Claude Code 2.1.296,
+avec des sessions <code>claude -p --model haiku</code> ; les copies d'identifiants qu'elles demandaient ont été
+effacées ensuite.</li>
 </ul>
 </details>
 </main>
