@@ -23,9 +23,19 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from . import runtime
 from .service import UNIT_NAME
 
-SCRIPT = Path(__file__).resolve().parent / "windows" / "tray.ps1"
+CODE_DIR = Path(__file__).resolve().parent
+SCRIPT = CODE_DIR / "windows" / "tray.ps1"
+
+
+def script(code_dir: Path) -> Path:
+    """tray.ps1 under the name that outlives an update: the Startup shortcut
+    keeps it for good."""
+    return runtime.stable(code_dir) / "windows" / "tray.ps1"
+
+
 SHORTCUT_NAME = "annotate-tray.lnk"
 
 
@@ -69,7 +79,7 @@ def command(port: int, *, once: bool = False) -> list[str]:
     argv = [powershell(), "-NoProfile", "-ExecutionPolicy", "Bypass"]
     if not once:
         argv += ["-WindowStyle", "Hidden"]
-    argv += ["-File", windows_path(SCRIPT), *environment_arguments(port)]
+    argv += ["-File", windows_path(script(CODE_DIR)), *environment_arguments(port)]
     if once:
         argv.append("-Once")
     return argv
@@ -93,7 +103,7 @@ def shortcut_script(port: int, *, uninstall: bool = False) -> str:
         ]
         return "\n".join(lines)
     args = ["-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass",
-            "-File", f'"{windows_path(SCRIPT)}"']
+            "-File", f'"{windows_path(script(CODE_DIR))}"']
     for value in environment_arguments(port):
         args.append(f'"{value}"' if " " in value or value.startswith("/") else value)
     lines += [

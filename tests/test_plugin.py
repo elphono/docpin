@@ -274,3 +274,28 @@ def test_the_launcher_starts_the_daemon_only_for_commands_that_need_it(
     monkeypatch.setenv("ANNOTATE_AUTOSTART", "1")
     cli.main(argv)
     assert started == ([config.DEFAULT_PORT] if starts else [])
+
+
+def test_the_tray_shortcut_names_the_stable_copy_never_a_dated_one(monkeypatch):
+    """The Startup shortcut outlives every update: made from a dated copy, it
+    would point at a folder pruned three versions later."""
+    from annotate import tray
+    runtime.install(ROOT / "src" / "annotate")
+    dated = runtime.current().resolve() / "annotate"            # what __file__ resolves to
+    assert dated.parent.name != "current"
+    stable = runtime.current() / "annotate" / "windows" / "tray.ps1"
+    assert tray.script(dated) == stable and stable.is_file()
+    named: list[Path] = []
+
+    def windows_path(path: Path) -> str:
+        assert isinstance(path, Path)
+        named.append(path)
+        return r"\\wsl.localhost\D\tray.ps1"
+    monkeypatch.setattr(tray, "CODE_DIR", dated)
+    monkeypatch.setattr(tray, "windows_path", windows_path)
+    monkeypatch.setenv("WSL_DISTRO_NAME", "D")
+    tray.shortcut_script(8765)
+    assert named == [stable]
+    # A clone names its own file, as before the plugin.
+    clone = ROOT / "src" / "annotate"
+    assert tray.script(clone) == clone / "windows" / "tray.ps1"

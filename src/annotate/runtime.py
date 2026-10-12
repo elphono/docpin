@@ -118,6 +118,13 @@ def _prune(keep: str) -> None:
 def watched(code_dir: Path) -> Path:
     """The folder whose content tells the daemon its code is stale: its own,
     or, when it runs a copy, the copy `current` points at now."""
+    return stable(code_dir)
+
+
+def stable(code_dir: Path) -> Path:
+    """The name of `code_dir` that survives an update: `current/annotate`
+    when it is a copy (whose dated folder is pruned KEEP versions later),
+    else `code_dir` itself."""
     try:
         code_dir.resolve().relative_to(runtime_dir().resolve())
     except ValueError:
