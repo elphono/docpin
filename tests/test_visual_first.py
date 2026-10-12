@@ -182,6 +182,30 @@ def test_the_hook_never_breaks_a_session(tmp_path):
     assert run_hook(write_payload(md, tmp_path), env).returncode == 0
 
 
+def test_the_hook_finds_docpin_through_its_stable_copy(tmp_path):
+    """Measured: another plugin's bin/ is not on a hook's PATH. The copy that
+    docpin's launcher keeps in its data folder is found instead."""
+    from annotate import runtime
+    runtime.install(ROOT / "src" / "annotate")
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    folders.add(str(reports))
+    md = reports / "weekly.md"
+    md.write_text("# Weekly\n", encoding="utf-8")
+    env = {"PATH": "/usr/bin:/bin"}
+    env_no_override = {k: v for k, v in os.environ.items() if k != "VISUAL_FIRST_ANNOTATE"}
+    done = subprocess.run([sys.executable, str(HOOK)], text=True, capture_output=True,
+                          timeout=30, input=json.dumps(write_payload(md, tmp_path)),
+                          env={**env_no_override, **env})
+    assert done.returncode == 2, done.stderr
+    import shutil
+    shutil.rmtree(runtime.runtime_dir())                       # the witness: no docpin
+    done = subprocess.run([sys.executable, str(HOOK)], text=True, capture_output=True,
+                          timeout=30, input=json.dumps(write_payload(md, tmp_path)),
+                          env={**env_no_override, **env})
+    assert done.returncode == 0 and done.stderr == ""
+
+
 def test_the_hook_asks_the_real_docpin(tmp_path):
     """The command docpin's plugin puts on the PATH, launched for real: a
     folder tracked in docpin is covered even without a docs/ on the way."""

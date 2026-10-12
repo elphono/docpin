@@ -328,6 +328,10 @@ MUTATIONS = (
              '    if path.suffix.lower() != ".html":\n        return "block"',
              '    if False:\n        return "block"',
              "a Markdown deliverable is blocked"),
+    Mutation("stable-copy-not-tried", "plugins/visual-first/hooks/check-document.py",
+             '    if (copy / "annotate" / "cli.py").is_file():\n',
+             '    if False:\n',
+             "the check finds docpin through its stable copy (no bin/ on a hook's PATH)"),
 )
 
 

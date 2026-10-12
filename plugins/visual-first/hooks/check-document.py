@@ -15,8 +15,9 @@ did not obtain (the author's own sessions, 2026-09).
 | `<!-- visual: exemption - reason -->` in its first five lines | nothing |
 
 **What is a document is decided by docpin when it is installed**
-(`annotate is-document <path>`: the folders the user tracks there, one rule
-in one place); without it, by a `docs/` folder between the project and the
+(`annotate is-document <path>`, through `annotate` on the PATH or docpin's
+stable copy: the folders the user tracks there, one rule in one place);
+without it, by a `docs/` folder between the project and the
 file. READMEs, `CLAUDE.md`, skills, dependencies and working notes (`plans/`,
 `drafts/`) are never covered.
 
@@ -66,13 +67,34 @@ def exemption(text: str) -> str | None:
     return None
 
 
+def _docpin_command() -> tuple[list[str], dict[str, str]] | None:
+    """How to ask docpin: `annotate` on the PATH, else the stable copy docpin's
+    plugin keeps in its data folder (src/annotate/runtime.py). Measured
+    2026-10-12: a plugin hook does not get another plugin's bin/ on its PATH,
+    so the copy is what this hook finds when both plugins are installed."""
+    env = dict(os.environ)
+    command = os.environ.get("VISUAL_FIRST_ANNOTATE")
+    if command is not None:
+        return ([command], env) if command else None
+    found = shutil.which("annotate")
+    if found:
+        return [found], env
+    data = Path(os.environ.get("ANNOTATE_DATA_DIR")
+                or Path.home() / ".local" / "share" / "annotate")
+    copy = data / "runtime" / "current"
+    if (copy / "annotate" / "cli.py").is_file():
+        return [sys.executable, "-P", "-m", "annotate"], {**env, "PYTHONPATH": str(copy)}
+    return None
+
+
 def _docpin_says(path: Path) -> bool | None:
-    command = os.environ.get("VISUAL_FIRST_ANNOTATE") or shutil.which("annotate")
-    if not command:
+    found = _docpin_command()
+    if found is None:
         return None
+    command, env = found
     try:
-        done = subprocess.run([command, "is-document", str(path)], capture_output=True,
-                              text=True, timeout=10, check=False)
+        done = subprocess.run([*command, "is-document", str(path)], capture_output=True,
+                              text=True, timeout=10, check=False, env=env)
     except (OSError, subprocess.SubprocessError):
         return None
     return {0: True, 1: False}.get(done.returncode)
