@@ -161,3 +161,7 @@ class Sender:
         registry.mark_sent(doc_id, [a["id"] for a in items], stamp)
         registry.update(doc_id, status="delivered", sent_at=stamp, delivered_to=target,
                         last_error="", **fields)
+        # After the update, so that its last_error="" never hides a failed copy.
+        missing = registry.take_baseline(doc_id, stamp)
+        if missing:
+            log.warning("%s: %s", doc_id, missing)

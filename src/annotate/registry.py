@@ -6,6 +6,7 @@ Layout under `config.data_dir()` (default `~/.local/share/annotate`):
     registry.lock            flock target, never read
     annotations/<id>.json    {"doc_id": id, "annotations": [...]}
     forgotten.json           {"version": 1, "forgotten": {path: mtime}}
+    baselines/<id>.html      the document as it was at the last send (take_baseline)
 
 **A document the user unmanaged stays out until it is written again**:
 `forget` records the file's date, and the catch-up pass of a rescan
@@ -90,6 +91,44 @@ def annotations_path(doc_id: str) -> Path:
     if not doc_id.isalnum():
         raise UnknownDocument(f"invalid document id {doc_id!r}")
     return _root() / "annotations" / f"{doc_id}.json"
+
+
+def baseline_path(doc_id: str) -> Path:
+    if not doc_id.isalnum():
+        raise UnknownDocument(f"invalid document id {doc_id!r}")
+    return _root() / "baselines" / f"{doc_id}.html"
+
+
+def take_baseline(doc_id: str, stamp: str) -> str:
+    """Copy the document as it is NOW: the reference the page compares with.
+
+    Taken at every send, and by "Mark as read". One per document, replaced.
+    When the copy cannot be made, the previous one is REMOVED and the reason
+    returned (and kept in `last_error`): comparing with an older version
+    would mark as new what the reader has already read. Never raises on the
+    copy itself: at a send, the notes are already gone.
+    """
+    target = baseline_path(doc_id)
+    try:
+        text = Path(get(doc_id)["path"]).read_text(encoding="utf-8", errors="replace")
+        atomic_write(target, text)
+    except OSError as exc:
+        try:
+            target.unlink(missing_ok=True)
+        except OSError:
+            pass
+        reason = f"no reference kept for what changes next: {exc}"
+        update(doc_id, baseline_at="", last_error=reason[:500])
+        return reason
+    update(doc_id, baseline_at=stamp)
+    return ""
+
+
+def read_baseline(doc_id: str) -> str | None:
+    try:
+        return baseline_path(doc_id).read_text(encoding="utf-8", errors="replace")
+    except FileNotFoundError:
+        return None
 
 
 @contextmanager
@@ -340,6 +379,7 @@ def forget(doc_id: str, delete_file: bool = False) -> dict[str, Any]:
         entry = docs.pop(doc_id)
         _write_docs(docs)
         annotations_path(doc_id).unlink(missing_ok=True)
+        baseline_path(doc_id).unlink(missing_ok=True)
         if not delete_file:
             try:
                 mtime = Path(entry["path"]).stat().st_mtime
