@@ -67,17 +67,45 @@ for your notes. Allow it.
 |---|---|
 | the two plugins | in Claude Code's own plugin folder, like any plugin |
 | your notes, and a copy of docpin's code | `~/.local/share/annotate` |
-| a small background program that serves the pages | it starts by itself when a session writes a document, and only answers your own machine (`http://127.0.0.1:8765`) |
+| docpin's daemon: the small background program that serves the pages and carries your notes | **included in the docpin plugin**, nothing else to install; it only answers your own machine (`http://127.0.0.1:8765`) |
 
 Nothing is written into your projects, nothing is installed system-wide, nothing goes to the network.
 
-Optional extras:
+**When the daemon runs.** It is not started with Claude Code: the first time a session writes a
+document, docpin sees that no daemon answers and starts it in the background. It then keeps running
+until the machine (or WSL) restarts, and the next document starts it again. The only thing it does
+not do on its own is start at login, so that the home page answers before any session wrote anything.
 
-| You want | Run |
+### Optional: start the daemon at login
+
+This uses systemd, which recent Linux distributions and WSL Ubuntu have switched on (not macOS).
+
+1. In a Claude Code session, type `! annotate service`. (`annotate` is on the PATH of Claude Code's
+   sessions, not of an ordinary terminal; the `!` runs it from the session.) It writes the service file.
+2. In any terminal:
+
+   ```bash
+   loginctl enable-linger $USER          # keep it running when no terminal is open
+   systemctl --user daemon-reload
+   systemctl --user enable annotate.service
+   ```
+
+3. The service takes over at the next start of your machine (on Windows: the next start of WSL, for
+   instance after `wsl --shutdown`). If docpin has not started its daemon yet, start the service right
+   away instead: `systemctl --user start annotate.service`. Do not start it while docpin's own daemon
+   runs: both would want the same port.
+
+To check: `systemctl --user status annotate.service`. To undo:
+`systemctl --user disable --now annotate.service`.
+
+### Other extras
+
+Type them in a Claude Code session:
+
+| You want | Type |
 |---|---|
-| the background program to start at login, before any session | `annotate service`, then the three commands it prints |
-| an icon in the Windows notification area | `annotate tray --start` |
-| the list of your documents | `annotate open`, or `http://127.0.0.1:8765/` |
+| the list of your documents | `! annotate open`, or open `http://127.0.0.1:8765/` |
+| an icon in the Windows notification area | `! annotate tray --start` |
 
 ## Every day
 
@@ -88,8 +116,8 @@ Optional extras:
 - Reopen the document after the correction: the changes are marked. **Mark as read** when you are done.
 
 **Which documents?** Out of the box, the HTML files a session writes in a `docs/` folder. To follow
-another folder, add it on the home page (`annotate open`). Documents also show up when a script or a
-helper agent wrote them, within 30 seconds.
+another folder, add it on the home page (`! annotate open` in a session). Documents also show up when
+a script or a helper agent wrote them, within 30 seconds.
 
 ## Update, uninstall
 
@@ -110,7 +138,8 @@ desktop, and the tray icon on screen. What comes next is in [ROADMAP.md](ROADMAP
 
 Configuration is optional: `~/.config/annotate/config.toml` takes `port`, `claude_bin` (how to start
 Claude Code) and `terminal` (which terminal reopens a closed session, for instance
-`["kitty", "bash", "-l", "{script}"]`). The command line does what the pages do:
+`["kitty", "bash", "-l", "{script}"]`). The command line does what the pages do; type each command in a
+Claude Code session with a leading `!`:
 
 ```bash
 annotate list                        # one line per document
