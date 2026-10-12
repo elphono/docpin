@@ -8,7 +8,8 @@ forwards its own to the child: Python received two (10 times out of 15), and
 the duplicate ended in exit 143 or in a deadlock then SIGKILL.
 
 Every path comes from the environment at generation time: the interpreter
-running this command (hence the venv), `claude`, `cmd.exe`, `explorer.exe` and
+running this command (hence the venv, or for the plugin the system's
+`python3` on the stable copy of runtime.py), `claude`, `cmd.exe`, `explorer.exe` and
 `wt.exe` on the PATH. Nothing is written in the code.
 """
 from __future__ import annotations
@@ -24,6 +25,12 @@ UNIT_NAME = "annotate.service"
 
 class ServiceError(Exception):
     """The unit cannot be generated on this machine."""
+
+
+def from_plugin() -> bool:
+    """True when the plugin's `bin/annotate` launched this process: the
+    code then lives in the stable copy (runtime.py), never in a virtualenv."""
+    return bool(os.environ.get("ANNOTATE_LAUNCHER"))
 
 
 def entry_point() -> Path:
@@ -56,19 +63,28 @@ def search_path() -> str:
     return ":".join(dirs)
 
 
-def unit_text(entry: Path, project: Path, path_env: str) -> str:
+def unit_text(entry: Path, project: Path, path_env: str,
+              python_path: Path | None = None) -> str:
+    """The unit. `entry` is the virtualenv's `annotate`, or, for the plugin
+    (`python_path` set), the system's interpreter, run on the stable copy
+    that `runtime.current()` names: never on the plugin's version folder."""
+    if python_path is None:
+        start, extra = f"{entry} serve", ""
+    else:
+        start = f"{entry} -P -m annotate serve"
+        extra = f"Environment=PYTHONPATH={python_path}\nEnvironment=ANNOTATE_LAUNCHER=annotate\n"
     return f"""[Unit]
-Description=annotate-workflow daemon (annotate HTML documents, send notes to Claude Code)
-Documentation=file://{project}/CLAUDE.md
+Description=docpin daemon (annotate HTML documents, send notes to Claude Code)
+Documentation=https://github.com/elphono/docpin
 After=default.target
 
 [Service]
 Type=simple
 WorkingDirectory={project}
 Environment=PATH={path_env}
-# The daemon DIRECTLY, never under `uv run`: uv forwards the SIGTERM systemd
+{extra}# The daemon DIRECTLY, never under `uv run`: uv forwards the SIGTERM systemd
 # already sends to the whole group (remarkable-sync, measured 2026-09-15).
-ExecStart={entry} serve
+ExecStart={start}
 Restart=on-failure
 RestartSec=5
 
@@ -104,9 +120,39 @@ def control(verb: str) -> None:
 
 
 def write_unit() -> Path:
-    entry = entry_point()
-    project = Path(__file__).resolve().parent.parent.parent
     target = unit_path()
+    if from_plugin():
+        from . import config, runtime
+        text = unit_text(Path(sys.executable), config.data_dir(), search_path(),
+                         python_path=runtime.current())
+    else:
+        project = Path(__file__).resolve().parent.parent.parent
+        text = unit_text(entry_point(), project, search_path())
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(unit_text(entry, project, search_path()), encoding="utf-8")
+    target.write_text(text, encoding="utf-8")
     return target
+
+
+def start_daemon() -> str:
+    """Start the daemon in the background, for the plugin's on-demand start
+    (decision Q5): through systemd when the unit exists, else as a process of
+    its own session, logging to `daemon.log` of the data folder. Returns how."""
+    from . import config
+    if unit_path().is_file():
+        try:
+            subprocess.Popen(["systemctl", "--user", "--no-block", "start", UNIT_NAME],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True)
+        except OSError as exc:
+            raise ServiceError(f"cannot run systemctl: {exc}") from exc
+        return "systemd"
+    folder = config.data_dir()
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        with open(folder / "daemon.log", "ab") as log:
+            subprocess.Popen([sys.executable, "-P", "-m", "annotate", "serve"],
+                             stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                             cwd=folder, start_new_session=True)
+    except OSError as exc:
+        raise ServiceError(f"cannot start the daemon: {exc}") from exc
+    return "process"

@@ -86,7 +86,7 @@ def test_the_detector_sees_what_it_forbids():
 def test_every_module_exposes_its_exception():
     missing = []
     for path in (ROOT / "src" / "annotate").glob("*.py"):
-        if path.name in ("__init__.py", "cli.py"):
+        if path.name in ("__init__.py", "__main__.py", "cli.py"):
             continue
         tree = ast.parse(path.read_text(encoding="utf-8"))
         classes = [n for n in tree.body if isinstance(n, ast.ClassDef)

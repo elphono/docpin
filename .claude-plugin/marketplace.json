@@ -1,0 +1,17 @@
+{
+  "name": "docpin",
+  "description": "docpin: annotate the HTML documents your Claude Code sessions write, and an optional visual-first output style",
+  "owner": {"name": "elphono", "url": "https://github.com/elphono"},
+  "plugins": [
+    {
+      "name": "docpin",
+      "source": "./",
+      "description": "Pin notes on the HTML documents a session writes; the notes come back to that session"
+    },
+    {
+      "name": "visual-first",
+      "source": "./plugins/visual-first",
+      "description": "An output style that draws before it writes, and a check that every document is a self-contained HTML page with visuals"
+    }
+  ]
+}

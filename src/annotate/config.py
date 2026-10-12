@@ -103,8 +103,14 @@ def kernel_release() -> str:
 
 
 def annotate_command() -> str:
-    """Absolute path of the `annotate` entry point of the running interpreter's
-    environment (the project's virtualenv), else the bare name."""
+    """How a session calls `annotate`: the bare name when the plugin's
+    `bin/annotate` launched this process (it is on the session's PATH, and
+    the plugin's folder changes with every version), else the absolute path
+    of the entry point of the running interpreter's environment (the
+    project's virtualenv), else the bare name."""
+    launcher = os.environ.get("ANNOTATE_LAUNCHER", "").strip()
+    if launcher:
+        return launcher
     entry = Path(sys.executable).parent / "annotate"
     return str(entry) if entry.is_file() else "annotate"
 

@@ -9,9 +9,10 @@ daemon, two sessions on the same ink.)
 from __future__ import annotations
 
 import json
+import time
 import urllib.error
 import urllib.request
-from typing import Any
+from typing import Any, Callable
 
 from .server import CLIENT_HEADER
 
@@ -51,3 +52,27 @@ def call(port: int, method: str, path: str, body: object = None,
     except json.JSONDecodeError as exc:
         raise ClientError(f"{method} {path}: unreadable answer") from exc
     return result if isinstance(result, dict) else {"value": result}
+
+
+START_WAIT = 8.0
+
+
+def ensure_daemon(port: int, start: Callable[[], str], wait: float = START_WAIT) -> str:
+    """The plugin's on-demand start: `"running"` if a daemon answers, else
+    start one with `start` and wait until it answers. Raise DaemonUnreachable
+    if it never does: the caller says so instead of waiting in silence."""
+    try:
+        call(port, "GET", "/api/docs", timeout=2)
+        return "running"
+    except DaemonUnreachable:
+        pass
+    how = start()
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            call(port, "GET", "/api/docs", timeout=2)
+            return f"started ({how})"
+        except DaemonUnreachable:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.2)

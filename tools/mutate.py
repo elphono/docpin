@@ -292,6 +292,22 @@ MUTATIONS = (
              "    if template:\n        if not any(",
              "    if False:\n        if not any(",
              "the configured terminal wins over the platform's"),
+    Mutation("launcher-runs-in-place", "bin/annotate",
+             '{**os.environ, "PYTHONPATH": str(HOME),',
+             '{**os.environ, "PYTHONPATH": str(PACKAGE.parent),',
+             "the plugin never runs the code from its version folder"),
+    Mutation("stale-ignores-new-copy", "src/annotate/runtime.py",
+             "    return current() / \"annotate\"\n",
+             "    return code_dir\n",
+             "a daemon on a copy turns stale when a new version is installed"),
+    Mutation("autostart-everywhere", "src/annotate/cli.py",
+             'AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session"})',
+             'AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session", "status"})',
+             "status reports and never starts a daemon"),
+    Mutation("prune-current", "src/annotate/runtime.py",
+             "    for old in [p for p in copies if p.name != keep][KEEP - 1:]:\n",
+             "    for old in copies[KEEP - 1:]:\n",
+             "the copy in use is never pruned"),
 )
 
 

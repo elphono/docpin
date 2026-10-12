@@ -61,7 +61,7 @@ from typing import Any
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from . import (browser, claude, config, folders, htmldoc, inbox, listeners, registry,
-               scanner, sender, service)
+               runtime, scanner, sender, service)
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -126,7 +126,9 @@ class AnnotateServer(ThreadingHTTPServer):
         self.sender = send
         self.wait_hold = WAIT_HOLD
         self.catchups = scanner.CatchUps()
-        self.code_dir = CODE_DIR
+        # A daemon running the plugin's stable copy watches the copy that
+        # `current` points at: a new version makes a new copy (runtime.py).
+        self.code_dir = runtime.watched(CODE_DIR)
         self.code_at_start = code_fingerprint(self.code_dir)
 
     @property

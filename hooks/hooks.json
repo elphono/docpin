@@ -1,0 +1,13 @@
+{
+  "description": "Register the HTML documents a session writes, so that the reader's notes come back to that session",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/register-on-write.py", "timeout": 30}
+        ]
+      }
+    ]
+  }
+}

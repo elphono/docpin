@@ -9,8 +9,8 @@ that very session.
 
 Reads the hook JSON on stdin (`session_id`, `cwd`, `tool_input.file_path`).
 For every `.html` file, calls `annotate register <path> --session <id> --cwd
-<cwd> --hook`, found on the PATH first, then in the virtualenv of this
-repository. **What is a document is decided there**, by the tracked folders
+<cwd> --hook`, through the plugin's `bin/annotate` next to this folder,
+else `annotate` on the PATH, else the virtualenv of this repository. **What is a document is decided there**, by the tracked folders
 the user chose (src/annotate/folders.py), not here: since 2026-10-07 the
 folders change from the index page, and a copy of the rule in this file
 would go stale. The command prints an `additionalContext` that tells the
@@ -20,7 +20,8 @@ command is what brings the user's notes back into the open conversation
 (see src/annotate/listeners.py).
 
 **It never fails the session's tool call**: every error is swallowed, the
-exit code is always 0, the registration is bounded to 10 s, and anything
+exit code is always 0, the registration is bounded to 20 s (the daemon may
+have to start: runtime.py, client.ensure_daemon), and anything
 that is not a JSON object is dropped rather than forwarded.
 
 A session answering notes edits the document, and is registered again:
@@ -29,6 +30,7 @@ that is how `delivered` becomes `answered` (registry.register).
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -36,10 +38,17 @@ from pathlib import Path
 
 
 def annotate_command() -> list[str] | None:
+    """The plugin's own launcher first (`bin/annotate` next to this folder:
+    the plugin, or a clone), then `annotate` on the PATH, then the clone's
+    virtualenv."""
+    root = Path(__file__).resolve().parent.parent
+    launcher = root / "bin" / "annotate"
+    if launcher.is_file() and os.access(launcher, os.X_OK):
+        return [str(launcher)]
     found = shutil.which("annotate")
     if found:
         return [found]
-    local = Path(__file__).resolve().parent.parent / ".venv" / "bin" / "annotate"
+    local = root / ".venv" / "bin" / "annotate"
     return [str(local)] if local.is_file() else None
 
 
@@ -71,7 +80,7 @@ def main() -> int:
         argv += ["--cwd", cwd]
     argv.append("--hook")
     try:
-        done = subprocess.run(argv, capture_output=True, text=True, timeout=10,
+        done = subprocess.run(argv, capture_output=True, text=True, timeout=20,
                               check=False)
     except (OSError, subprocess.SubprocessError):
         return 0

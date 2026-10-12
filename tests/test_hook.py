@@ -30,6 +30,11 @@ def run_hook(tmp_path):
     fake.chmod(0o755)
     workspace = tmp_path / "workspace"
     outputs: list[str] = []
+    # A copy of the hook, alone in its folder: next to the real one sits the
+    # plugin's bin/annotate, which the hook prefers to the fake on the PATH.
+    hook = tmp_path / "alone" / "hooks" / HOOK.name
+    hook.parent.mkdir(parents=True)
+    hook.write_text(HOOK.read_text(encoding="utf-8"), encoding="utf-8")
 
     def run(payload, extra_env=None, prints=None):
         if prints is not None:
@@ -37,7 +42,7 @@ def run_hook(tmp_path):
         env = {**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}",
                **(extra_env or {})}
         data = payload if isinstance(payload, str) else json.dumps(payload)
-        done = subprocess.run([sys.executable, str(HOOK)], input=data, text=True,
+        done = subprocess.run([sys.executable, str(hook)], input=data, text=True,
                               capture_output=True, env=env, timeout=30)
         assert done.returncode == 0, done.stderr
         outputs.append(done.stdout)

@@ -30,8 +30,8 @@ from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
-from . import (browser, claude, client, config, folders, prompt, registry, scanner,
-               server, service, tray)
+from . import (__version__, browser, claude, client, config, folders, prompt, registry,
+               scanner, server, service, tray)
 
 log = logging.getLogger("annotate")
 
@@ -268,6 +268,9 @@ def cmd_status(args: argparse.Namespace, cfg: config.Config) -> int:
 def parser() -> argparse.ArgumentParser:
     top = argparse.ArgumentParser(prog="annotate", description=__doc__.splitlines()[0])
     top.add_argument("-v", "--verbose", action="store_true")
+    # Which code runs: the plugin's stable copy (runtime.py), or a clone.
+    top.add_argument("--version", action="version", version=(
+        f"docpin {__version__} ({Path(__file__).resolve().parent})"))
     sub = top.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("register", help="register an HTML document")
@@ -344,6 +347,24 @@ def parser() -> argparse.ArgumentParser:
     return top
 
 
+# The commands that need a daemon, started on demand when the plugin's
+# `bin/annotate` launched them (decision Q5). `status` reports, it never starts.
+AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session"})
+
+
+def _autostart(args: argparse.Namespace, cfg: config.Config) -> None:
+    if args.command == "register" and not (args.hook and folders.wanted(Path(args.path))):
+        return
+    try:
+        how = client.ensure_daemon(cfg.port, service.start_daemon)
+    except client.DaemonUnreachable as exc:
+        log.warning("the daemon did not start: %s (see %s)", exc,
+                    config.data_dir() / "daemon.log")
+        return
+    if how != "running":
+        log.info("daemon %s on 127.0.0.1:%s", how, cfg.port)
+
+
 ERRORS = (config.ConfigError, registry.RegistryError, client.ClientError,
           browser.OpenError, server.ServerError, service.ServiceError,
           tray.TrayError, scanner.ScanError, folders.FoldersError,
@@ -359,6 +380,8 @@ def main(argv: list[str] | None = None) -> int:
                         format="%(levelname)s %(message)s", stream=sys.stderr)
     try:
         cfg = config.load_config()
+        if os.environ.get("ANNOTATE_AUTOSTART") == "1" and args.command in AUTOSTART:
+            _autostart(args, cfg)
         return int(args.run(args, cfg))
     except ERRORS as exc:
         print(f"error: {exc}", file=sys.stderr)
