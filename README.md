@@ -5,141 +5,125 @@ flow back to the session that wrote the document, and it fixes it.**
 
 ![How docpin works: a Claude Code session writes a document, the daemon serves it to your browser, and your notes travel back to the same conversation](docs/figures/flow.svg)
 
-A long answer from Claude Code is hard to read in a terminal and awkward to answer. docpin gives every
-HTML document the session writes a page in your browser, and a way to react to it in place.
+A long answer from Claude Code is hard to read in a terminal and awkward to answer. With docpin, the
+session writes a document instead; you read it in your browser, Alt+click the sentence that is wrong,
+type what you want, and click **Send to session**. The session that wrote the document gets your
+notes, each with the passage it points at, corrects the document, and waits for the next round.
 
-A Claude Code session writes `docs/report.html`. You open it, Alt+click the sentence that is wrong,
-type what you want instead, click **Send to session**. The session that wrote the document receives
-your notes — each one carries the passage it points at — corrects the file on disk, and waits for the
-next round. No copy-pasting of quotes into the terminal, no “which paragraph did I mean?”.
+- **Your notes go back to the same conversation**, not to a new one.
+- **Nothing to install in the browser**, any browser works.
+- **Your projects stay clean**: your notes are kept on your machine, never next to the document.
+- **After a correction, the page shows what changed** since you sent your notes, and folds what you
+  already read.
 
-- **The notes go to the conversation that wrote the document**, not to a fresh one. If that session is
-  still open, nothing else opens; if it is gone, a terminal tab resumes it.
-- **Nothing to install in the browser.** The daemon serves your document with an annotation layer
-  injected. Any browser works.
-- **No runtime dependency.** The daemon is `http.server`, the configuration is `tomllib`, the registry
-  is `json`. Python 3.12+ and nothing else.
-- **Your repository stays clean.** Notes live under `~/.local/share/annotate`, never next to the
-  document.
-- **A note never gets lost.** If you edit the document and a note's anchor no longer resolves, the note
-  moves to an “orphans” list and is still sent, with the passage it quoted.
+## What you get
 
-## Status
-
-v0.3, used daily by its author. The core loop (hook, daemon, overlay, the three delivery routes) is
-covered by a test suite that never launches a real `claude`, `systemctl`, `wt.exe` or signal (guards
-fail the test instead), and its central properties are checked by mutation. Installing as a plugin
-from this repository, updating it, and the daemon it starts on demand were measured on 2026-10-12 in
-an empty home directory. Not yet measured: Alt+click in a real Windows Chrome (it is tested in
-headless Chromium on Linux), native Linux and macOS desktops, and the look of the tray icon. See
-[ROADMAP.md](ROADMAP.md).
-
-## Requirements
-
-| | Needed for | Notes |
+| | What it does | Needed? |
 |---|---|---|
-| [Claude Code](https://claude.com/claude-code) 2.1.275 or later | everything | the hook and `annotate wait` run inside its sessions |
-| Python ≥ 3.12 (`python3`) | everything | no package is installed: the plugin runs the code with the system's `python3` |
-| a terminal: Windows Terminal on WSL, any desktop terminal on Linux | route C: resuming a session that is gone | or set `terminal = ["kitty", "bash", "-l", "{script}"]` in `~/.config/annotate/config.toml` |
-| systemd user services | the daemon as a service | optional: the plugin starts the daemon on demand |
-| Windows | the tray icon | optional |
+| **docpin** | the loop above: your sessions write documents you can annotate, and your notes come back to them | yes |
+| **visual-first** | sessions draw diagrams and tables instead of walls of text, and every document they write is checked: a session that writes plain text where a page with pictures was expected is sent back to it | optional, recommended |
+| [epic-infographics](https://github.com/OrRon/EpicInfographics) | richer poster-like figures, as images | optional, another author's plugin: `/plugin install epic-infographics --marketplace OrRon/EpicInfographics` |
 
-| Platform | State |
+That is exactly the author's setup, minus his own preferences (he writes in French).
+
+## Where it works
+
+| Your machine | Works? |
 |---|---|
-| WSL2 + Windows | developed and used daily |
-| native Linux | supported: `xdg-open`, the first desktop terminal found; not tried on a desktop yet |
-| macOS | written from the documentation (`open`, Terminal.app through `osascript`), not tested |
+| Windows, with Claude Code running in WSL2 | ✓ developed and used every day |
+| Linux | ✓ should work: built for it, not yet tried on a desktop |
+| macOS | ⚠ written for it, never tested |
+| Windows without WSL | ✗ not supported |
+
+## Before you start
+
+- **Claude Code** 2.1.275 or later.
+- **Python 3.12 or newer**, available as `python3`. Ubuntu 24.04 and recent distributions have it; on
+  Ubuntu 22.04 or macOS, install a newer Python first. docpin installs no Python package.
+- A browser.
 
 ## Install
 
-**As a Claude Code plugin** (recommended). In a session:
+1. In a Claude Code session, type:
 
-```text
-/plugin install docpin --marketplace elphono/docpin
-```
+   ```text
+   /plugin install docpin --marketplace elphono/docpin
+   ```
 
-or, in two steps, `/plugin marketplace add elphono/docpin` then `/plugin install docpin@docpin`.
-Start a **new** session: hooks load when a session starts. That is all. The first document a session
-writes starts the daemon on `127.0.0.1:8765`, and `annotate` is on the PATH of your sessions
-(`! annotate open` opens the home page).
+2. Optional, recommended: `/plugin install visual-first@docpin`. To also make your sessions answer in
+   its style, pick **visual-first** in `/output-style`.
+3. **Start a new session.** That is all: there is nothing to configure.
 
-The plugin brings:
+To try it, ask that new session for something to review, for instance *"write up how our login
+works, as a document I can comment on"*. It answers with a link: open it, Alt+click a sentence, write
+a note, click **Send to session**. The session receives the note and fixes the document.
 
-- the hook that registers the documents a session writes, and tells it how to get your notes back;
-- the skill **annotatable-documents**, which tells a session what to write, where, and how to answer
-  your notes;
-- the `annotate` command. It never runs from the plugin's own folder, which Claude Code deletes 14 days
-  after an update: it copies the code once per version under `~/.local/share/annotate/runtime/` and
-  runs that copy. After an update, the page offers **Restart daemon**.
+The first time, Claude Code asks your permission to run `annotate wait`: that is the session waiting
+for your notes. Allow it.
 
-Optional, from the same marketplace: **visual-first** (`/plugin install visual-first@docpin`), an
-output style that draws before it writes (pick it in `/output-style`, it is never imposed) and a check
-that sends a session back to a document that is Markdown, has no visual, or loads from the network.
+## What it puts on your machine
 
-To keep the daemon running across logins instead of on demand:
+| What | Where |
+|---|---|
+| the two plugins | in Claude Code's own plugin folder, like any plugin |
+| your notes, and a copy of docpin's code | `~/.local/share/annotate` |
+| a small background program that serves the pages | it starts by itself when a session writes a document, and only answers your own machine (`http://127.0.0.1:8765`) |
 
-```bash
-annotate service                              # writes ~/.config/systemd/user/annotate.service
-loginctl enable-linger $USER
-systemctl --user daemon-reload
-systemctl --user enable --now annotate.service
-annotate tray --start                         # optional, Windows: tray icon + Startup shortcut
-```
+Nothing is written into your projects, nothing is installed system-wide, nothing goes to the network.
 
-**By hand, from a clone** (to work on docpin itself):
+Optional extras:
 
-```bash
-git clone https://github.com/elphono/docpin.git && cd docpin && uv sync
-claude --plugin-dir .                         # this session loads the clone as the plugin
-```
+| You want | Run |
+|---|---|
+| the background program to start at login, before any session | `annotate service`, then the three commands it prints |
+| an icon in the Windows notification area | `annotate tray --start` |
+| the list of your documents | `annotate open`, or `http://127.0.0.1:8765/` |
 
-`--plugin-dir` replaces an installed docpin for that session, without registering anything twice.
+## Every day
 
-**Tracked folders.** Out of the box: the `docs/` folders of your workspace (`~/workspace` unless you
-set `ANNOTATE_WORKSPACE`), or, without a workspace, every `docs/` folder under your home directory,
-found when a session writes there (your home directory is never walked: it is far too big). Add any
-folder under your home directory from the home page (or `annotate folders add <folder>`): every
-`.html` file under it is tracked, except in `build/`, `node_modules/`, `figures/` and the like. The
-daemon also walks the tracked folders every 30 seconds, which catches documents written by Bash
-(`cp` from a scratchpad, subagents) that never go through the hook. Adding a folder takes its files of
-the last days; **Rescan all folders** does the same everywhere, for 1, 7, 30 or 90 days. A document you
-unmanaged stays out until it is written again.
+- Ask a session for a document (a spec, a report, a plan to review). It gives you the link.
+- **Alt+click** to pin a note; select text first to quote exactly that.
+- **Send to session**. If the session is still open, the notes arrive there (Claude Code may show an
+  *Approve / Deny* dialog first); if you closed it, a terminal tab reopens it.
+- Reopen the document after the correction: the changes are marked. **Mark as read** when you are done.
 
-## Use
+**Which documents?** Out of the box, the HTML files a session writes in a `docs/` folder. To follow
+another folder, add it on the home page (`annotate open`). Documents also show up when a script or a
+helper agent wrote them, within 30 seconds.
 
-1. In a Claude Code session, ask for an HTML document in a tracked folder. The hook registers it and
-   tells the session to run `annotate wait <id>` in the background.
-2. Open the home page (`http://127.0.0.1:8765/`, or a left click on the tray icon), then the document.
-3. **Alt+click** anywhere to pin a note. Select text first and the note quotes exactly that selection.
-4. **Send to session** (the bar, the home page, the tray, or `annotate send <id>`). Only notes that were
-   never sent go out.
-5. When the session has corrected the document, reopen it: what changed since your send is marked
-   (new, changed, removed), sections you already read fold into one line, and ▲ ▼ walk the changes.
-   **Mark as read** makes the version on screen the new reference.
+## Update, uninstall
 
-The home page groups documents by session — its title, then its folder — and the sessions by the
-git repository they run in; it carries every control:
-Open, Send to session, New session, Unmanage, Delete file; the tracked folders and the rescan; and
-Restart / Stop for the daemon. **Attach to session…** ties a document to any conversation of the
-machine that `claude --resume` can find (open ones first, filter as you type); **Detach** unties it.
+In a terminal:
+
+- Update: `claude plugin update docpin@docpin` (and `visual-first@docpin`), then start a new session.
+  If the home page says **Restart daemon**, click it.
+- Uninstall: `claude plugin uninstall docpin@docpin` (and `visual-first@docpin`). Your notes stay in
+  `~/.local/share/annotate`; delete that folder to remove them too.
+
+## Status
+
+v0.3, used every day by its author. Installing from this page, updating, and the whole loop up to a
+note sent from Chrome on Windows were checked on 2026-10-12. Not yet checked: a Linux or macOS
+desktop, and the tray icon on screen. What comes next is in [ROADMAP.md](ROADMAP.md).
+
+## For the curious
+
+Configuration is optional: `~/.config/annotate/config.toml` takes `port`, `claude_bin` (how to start
+Claude Code) and `terminal` (which terminal reopens a closed session, for instance
+`["kitty", "bash", "-l", "{script}"]`). The command line does what the pages do:
 
 ```bash
 annotate list                        # one line per document
 annotate open [<id>]                 # a document, or the home page
 annotate send <id>                   # same as the button
 annotate resend <id>                 # the last batch again, if it never reached the session
-annotate new-session <id>            # the unsent notes go to a NEW session (a terminal tab)
+annotate new-session <id>            # the unsent notes go to a NEW session
 annotate forget <id> [--delete]
-annotate sessions                    # the conversations a document can be attached to
-annotate attach <id> <session>       # or: annotate detach <id>
-annotate folders [add|remove <dir>]  # the tracked folders
-annotate rescan [--days 7] [--folder F]  # register what was written recently
+annotate attach <id> <session>       # tie a document to another conversation (or: detach)
+annotate folders [add|remove <dir>]  # the followed folders
+annotate rescan [--days 7]           # take what was written recently
 annotate status
 ```
-
-Configuration is optional: `~/.config/annotate/config.toml` (`port`, `claude_bin`, `terminal`), overridden by
-`ANNOTATE_PORT` and `ANNOTATE_CLAUDE`. Data lives under `ANNOTATE_DATA_DIR`
-(default `~/.local/share/annotate`).
 
 ## Security
 
@@ -150,6 +134,9 @@ and a `Host` that names localhost (DNS rebinding). `/docs/<id>/files/` serves no
 document's folder, symbolic links included.
 
 ## Develop
+
+From a clone (`git clone https://github.com/elphono/docpin.git && cd docpin && uv sync`),
+`claude --plugin-dir .` starts a session that uses the clone instead of the installed plugin.
 
 ```bash
 uv run pytest -q                          # default suite
