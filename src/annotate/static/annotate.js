@@ -48,6 +48,7 @@
   let loadedMtime = null;      // the file as this page shows it
   let changed = false;         // the file on disk is newer than the page
   let saving = Promise.resolve();
+  let changeView = null;       // what changed since the last send (changes.js)
 
   // -- DOM scaffolding -----------------------------------------------------
   const host = document.createElement('annotate-root');
@@ -226,6 +227,38 @@
     else if (entry.mtime && entry.mtime !== loadedMtime) changed = true;
   }
 
+  // -- what changed since the last send ------------------------------------
+  async function loadChanges() {
+    const D = window.__annotateDiff;
+    const C = window.__annotateChanges;
+    if (!entry || !entry.baseline_at || !D || !C) return;
+    let data;
+    try {
+      data = await call('GET', '/baseline');
+    } catch (err) {
+      message = 'Cannot compare with your last send: ' + err.message;
+      return;
+    }
+    changeView = C.apply(D.compare(data.reference, data.current, document), {
+      layer, at: data.at, flash,
+      notes: annotations.map((a) => ({ target: resolve(a.selector), sent: Boolean(a.sent_at) })),
+      changed: () => render(),
+      markRead,
+    });
+    const aimed = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (changeView && aimed) { changeView.reveal(aimed); aimed.scrollIntoView(); }
+  }
+
+  async function markRead() {
+    try {
+      await call('POST', '/baseline');
+      location.reload();
+    } catch (err) {
+      message = 'Not marked as read: ' + err.message;
+      render();
+    }
+  }
+
   // -- editor bubble -----------------------------------------------------------
   function openEditor(item, isNew, x, y) {
     closeEditor();
@@ -328,7 +361,8 @@
       const dy = Math.min(Math.max(item.offset_y || 0, 0), Math.max(box.height, 0));
       const pin = pinFor(item);
       pin.className = 'pin' + (item.sent_at ? ' sent' : '');
-      pin.textContent = String(item.number);
+      pin.textContent = (item.sent_at ? '✓' : '') + String(item.number);
+      pin.style.display = changeView && changeView.hidden(target) ? 'none' : '';
       pin.style.left = (box.left - origin.left + dx) + 'px';
       pin.style.top = (box.top - origin.top + dy) + 'px';
       pin.title = item.note;
@@ -342,6 +376,7 @@
         pins.delete(id);
       }
     }
+    if (changeView) changeView.layout(origin);
     renderBar(orphans);
   }
 
@@ -351,13 +386,15 @@
     const pending = annotations.filter((a) => !a.sent_at).length;
     const sent = annotations.length - pending;
     const top = make('div', 'bar-top');
-    const counts = make('span', 'counts', pending + ' to send · ' + sent + ' sent');
+    const counts = make('span', 'counts', pending + ' to send · ' + sent + ' sent' +
+      (changeView ? ' · ' + changeView.total + ' changes' : ''));
     const toggle = make('button', 'toggle', collapsed ? '▴' : '▾');
     toggle.title = collapsed ? 'Expand' : 'Collapse';
     toggle.addEventListener('click', () => { collapsed = !collapsed; render(); });
     top.append(counts, toggle);
     bar.append(top);
     if (collapsed) return;
+    if (changeView) bar.append(changeView.panel());
 
     const busy = entry && entry.status === 'delivered';
     const status = make('div', 'status' + (busy ? ' busy' : ''),
@@ -422,6 +459,7 @@
   // -- events ---------------------------------------------------------------
   document.addEventListener('mousedown', (e) => {
     if (!e.altKey || e.button !== 0 || isUi(e)) return;
+    if (e.target.closest && e.target.closest('annotate-fold')) return;
     e.preventDefault();
     e.stopPropagation();
     suppressClick = true;
@@ -458,6 +496,8 @@
     const link = e.target.closest && e.target.closest('a[href^="#"]');
     if (!link) return;
     e.preventDefault();
+    const aimed = document.getElementById(decodeURIComponent(link.getAttribute('href').slice(1)));
+    if (changeView && aimed) { changeView.reveal(aimed); render(); }
     location.hash = link.getAttribute('href');
   });
 
@@ -484,6 +524,7 @@
       message = 'Cannot load the notes: ' + err.message;
     }
     await refreshEntry();
+    await loadChanges();
     render();
     setTimeout(poll, 4000);
   })();

@@ -1,11 +1,36 @@
-/* annotate overlay. Loaded twice: in the document (only .annotate-flash
-   applies there) and inside the overlay's shadow root (everything else). */
+/* annotate overlay. Loaded twice: in the document (.annotate-flash and the
+   change marks below apply there) and inside the overlay's shadow root
+   (everything else). */
 
 .annotate-flash {
   outline: 2px solid #f97316 !important;
   outline-offset: 3px !important;
   border-radius: 2px;
 }
+
+/* What changed since the last send (changes.js), in the document. */
+/* The side bar is drawn OUTSIDE the block (outer shadows never paint under
+   the box): it changes no layout and never covers the first letter. */
+.annotate-new { background-color: rgba(22, 163, 74, .12) !important;
+  box-shadow: -6px 0 0 #16a34a !important; }
+.annotate-changed { background-color: rgba(37, 99, 235, .11) !important;
+  box-shadow: -6px 0 0 #2563eb !important; }
+tr.annotate-new, tr.annotate-changed { box-shadow: none !important; }
+tr.annotate-new > :first-child { box-shadow: inset 4px 0 0 #16a34a !important; }
+tr.annotate-changed > :first-child { box-shadow: inset 4px 0 0 #2563eb !important; }
+svg.annotate-new, img.annotate-new { outline: 3px solid #16a34a !important; outline-offset: 4px; }
+svg.annotate-changed, img.annotate-changed { outline: 3px solid #2563eb !important; outline-offset: 4px; }
+.annotate-dim { opacity: .5; transition: opacity .15s; }
+.annotate-dim:hover { opacity: 1; }
+.annotate-folded { display: none !important; }
+annotate-fold { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 6px 0 12px;
+  padding: 8px 12px; border: 1px dashed rgba(127, 127, 127, .45); border-radius: 8px;
+  background: rgba(127, 127, 127, .10); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+annotate-fold b { font-weight: 600; }
+annotate-fold span { opacity: .7; }
+annotate-fold button { margin-left: auto; font: 600 13px system-ui, sans-serif; color: #2563eb;
+  background: none; border: 0; cursor: pointer; padding: 2px 4px; }
+::highlight(annotate-added) { background-color: rgba(37, 99, 235, .18); text-decoration: underline 2px #2563eb; }
 
 .layer, .bar {
   --accent: #ea580c;
@@ -16,6 +41,9 @@
   --muted: #6b7280;
   --line: #e5e7eb;
   --danger: #b91c1c;
+  --new: #16a34a;
+  --chg: #2563eb;
+  --gone: #b42318;
   font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
   color: var(--ink);
 }
@@ -26,6 +54,9 @@
     --muted: #9ca3af;
     --line: #374151;
     --sent: #64748b;
+    --new: #4ade80;
+    --chg: #7aa2ff;
+    --gone: #f87171;
   }
 }
 
@@ -95,3 +126,37 @@ button.danger { color: var(--danger); }
   .bar { left: 16px; right: 16px; width: auto; }
   .bubble { width: calc(100vw - 32px); }
 }
+
+/* The changes panel and the marks drawn in the overlay layer. */
+.pin.sent { min-width: 20px; height: 20px; font-size: 11px; opacity: .8; }
+/* The layer is 0 px wide: without nowrap, what it holds wraps word by word. */
+.chg-tag { position: absolute; white-space: nowrap; font: 800 11px/16px system-ui, sans-serif; letter-spacing: .04em;
+  color: #fff; padding: 0 7px; border-radius: 999px; pointer-events: auto; cursor: default; }
+.chg-tag.new { background: var(--new); }
+.chg-tag.changed { background: var(--chg); }
+.chg-removed { position: absolute; white-space: nowrap; font: 12px/18px system-ui, sans-serif; color: var(--gone);
+  background: var(--paper); border: 1px solid var(--gone); border-radius: 999px; padding: 0 9px; cursor: pointer; }
+.chg-old { position: absolute; width: max-content; max-width: 420px; padding: 6px 10px; background: var(--paper); color: var(--muted);
+  border-left: 3px solid var(--gone); border-radius: 0 6px 6px 0; text-decoration: line-through;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .15); font-size: 13px; }
+.chg { margin: 8px 0 10px; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
+.chg-head { font-weight: 700; }
+.chg-when { color: var(--muted); font-size: 12px; margin-bottom: 8px; }
+.chg-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; }
+.chg-counts div { border-radius: 7px; padding: 4px; text-align: center; font-size: 12px; color: var(--muted);
+  background: color-mix(in srgb, currentColor 6%, transparent); }
+.chg-counts b { display: block; font-size: 18px; line-height: 1.1; }
+.chg-counts .new b { color: var(--new); }
+.chg-counts .changed b { color: var(--chg); }
+.chg-counts .removed b { color: var(--gone); }
+.chg-lost { color: var(--danger); font-size: 12px; margin: 4px 0 8px; }
+.chg-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.chg-nav span { flex: 1; text-align: center; font-weight: 700; }
+.chg-list { list-style: none; margin: 0 0 8px; padding: 0; max-height: 180px; overflow: auto; }
+.chg-list li { display: flex; gap: 7px; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 12px; cursor: pointer; }
+.chg-list li.cur { font-weight: 700; }
+.chg-list .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 4px; flex: none; }
+.chg-list .dot.new { background: var(--new); }
+.chg-list .dot.changed { background: var(--chg); }
+.chg-list .dot.removed { background: var(--gone); }
+.chg-actions { display: flex; flex-wrap: wrap; gap: 6px; }

@@ -266,6 +266,8 @@ def inject_overlay(text: str, doc_id: str) -> str:
             text = base + text
     overlay = (
         '\n<link rel="stylesheet" href="/static/annotate.css">'
+        '\n<script src="/static/diff.js" defer></script>'
+        '\n<script src="/static/changes.js" defer></script>'
         f'\n<script src="/static/annotate.js" data-annotate-doc="{quoted}" defer>'
         "</script>\n")
     closings = list(_BODY_CLOSE.finditer(text))

@@ -77,6 +77,7 @@ def test_inject_overlay_adds_base_and_script_once():
     assert out.count('<base href="/docs/abc123/files/">') == 1
     assert out.index("<base") < out.index("<title>")
     assert out.count('src="/static/annotate.js"') == 1
+    assert out.index("diff.js") < out.index("changes.js") < out.index("annotate.js")
     assert 'data-annotate-doc="abc123"' in out
     assert out.index("annotate.js") < out.lower().rindex("</body>")
 

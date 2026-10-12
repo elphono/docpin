@@ -96,6 +96,7 @@ def test_overlay_in_a_real_browser(tmp_path, monkeypatch, make_doc):
 
 
 INDEX_SCRIPT = Path(__file__).resolve().parent / "browser" / "index_check.mjs"
+CHANGES_SCRIPT = Path(__file__).resolve().parent / "browser" / "changes_check.mjs"
 
 
 @pytest.mark.browser
@@ -173,3 +174,60 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     assert [f["path"] for f in folders.load()] == [str((tmp_path / "workspace").resolve())]
     assert bravo_path.exists() and not charlie_path.exists()
     assert bravo and charlie and asked == ["restart", "stop"]
+
+
+CHANGES_A = (
+    "<h1>Changes check</h1><p>Intro paragraph stays. <a href='#ctx-two'>to context two</a></p>"
+    "<h2 id='s1'>Context</h2><p>Context one.</p><p id='ctx-two'>Context two, already read.</p>"
+    "<h2 id='s2'>Options</h2><p>Three options were compared.</p>"
+    "<p>The migration takes a week, measured on the test copy.</p>"
+    "<p>Option C needs one more server.</p>"
+    "<h2 id='s3'>Notes</h2><p>A paragraph with an unsent note.</p>"
+    "<h2 id='s4'>Decision</h2><p>Decision text.</p>"
+    "<p id='clock'>Clock reads ten past nine</p>"
+    "<script>document.getElementById('clock').textContent = 'Set by a script'</script>")
+# B keeps eight <p> at the same ranks as A for the unsent note: "fourth
+# option" takes rank 5, the migration rank 6, and "Option C" goes away.
+CHANGES_B = CHANGES_A.replace(
+    "<p>The migration takes a week, measured on the test copy.</p>"
+    "<p>Option C needs one more server.</p>",
+    "<p>A fourth option keeps the old format read only for a month.</p>"
+    "<p>The migration takes two days, measured on the test copy.</p>")
+
+
+@pytest.mark.browser
+def test_changes_in_a_real_browser(tmp_path, make_doc):
+    """What changed since the last send: marked, folded, walked, then read."""
+    pw_dir = os.environ.get("ANNOTATE_PLAYWRIGHT_DIR", "")
+    node = shutil.which("node")
+    assert pw_dir and node, "see test_overlay_in_a_real_browser"
+    assert CHANGES_B != CHANGES_A
+    path = make_doc(CHANGES_A, title="Changes check")
+    doc_id = registry.register(path, session="sess-browser")["id"]
+    cfg = config.load_config()
+    srv = server.make_server(cfg, port=0, send=sender.Sender(cfg, opener=RecordingOpener()))
+    registry.replace_annotations(doc_id, [{
+        "id": "n1", "number": 1, "selector": "body > p:nth-of-type(2)", "quote": "Context one.",
+        "note": "Already handled", "offset_x": 4, "offset_y": 4}])
+    srv.sender.dispatch(doc_id)                      # the reference is A
+    assert registry.read_baseline(doc_id) == path.read_text()
+    registry.replace_annotations(doc_id, registry.list_annotations(doc_id) + [{
+        "id": "n2", "number": 2, "selector": "body > p:nth-of-type(7)",
+        "quote": "A paragraph with an unsent note.", "note": "Still to send",
+        "offset_x": 4, "offset_y": 4}])
+    path.write_text(path.read_text().replace(CHANGES_A, CHANGES_B))
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    out = Path(os.environ.get("ANNOTATE_BROWSER_OUT", tmp_path))
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        done = subprocess.run([node, str(CHANGES_SCRIPT), pw_dir, f"http://localhost:{srv.port}",
+                               doc_id, str(out), str(path)],
+                              capture_output=True, text=True, timeout=180)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    print(done.stdout)
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert "ten past ten" in (registry.read_baseline(doc_id) or "")   # Mark as read took C
+    third = [a for a in registry.list_annotations(doc_id) if a["note"] == "Third note, while folded."]
+    assert [a["selector"] for a in third] == ["body > p:nth-of-type(7)"]
