@@ -1,0 +1,466 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Périmètre du plugin</title>
+<style>
+:root {
+  --bg: #fbfaf7; --paper: #ffffff; --ink: #1d232b; --muted: #5d6673; --line: #e3e0d8;
+  --claude: #2563eb; --claude-soft: #dbe7ff;
+  --docpin: #c2410c; --docpin-soft: #ffe6d5;
+  --plat: #7c3aed; --plat-soft: #ece3ff;
+  --gen: #15803d; --gen-soft: #dcf5e3; --adapt: #a16207; --own: #b91c1c; --unk: #6b7280; --unk-soft: #eceef1;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181d; --paper: #1d2128; --ink: #e6e8eb; --muted: #9aa3ae; --line: #313844;
+    --claude: #7aa7ff; --claude-soft: #1f2e4d; --docpin: #fb923c; --docpin-soft: #4a2a15;
+    --plat: #b79bff; --plat-soft: #2d2350; --gen: #4ade80; --gen-soft: #173a24; --adapt: #fbbf24;
+    --own: #f87171; --unk: #9ca3af; --unk-soft: #2a2f37;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181d; --paper: #1d2128; --ink: #e6e8eb; --muted: #9aa3ae; --line: #313844;
+  --claude: #7aa7ff; --claude-soft: #1f2e4d; --docpin: #fb923c; --docpin-soft: #4a2a15;
+  --plat: #b79bff; --plat-soft: #2d2350; --gen: #4ade80; --gen-soft: #173a24; --adapt: #fbbf24;
+  --own: #f87171; --unk: #9ca3af; --unk-soft: #2a2f37;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 8px 0 6px; }
+h2 { font-size: 22px; margin: 44px 0 10px; padding-top: 10px; border-top: 2px solid var(--line); }
+h3 { font-size: 17px; margin: 24px 0 8px; }
+a { color: var(--claude); }
+.lede { color: var(--muted); font-size: 17px; margin: 0 0 14px; }
+.levels { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 14px 0 6px; }
+.levels span { color: var(--muted); font-size: 14px; }
+.levels button { font: inherit; font-size: 14px; color: var(--ink); background: var(--paper);
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.levels button[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 6px; }
+nav.toc a { text-decoration: none; color: var(--ink); background: var(--paper); border: 1px solid var(--line);
+  border-radius: 999px; padding: 4px 12px; font-size: 14px; }
+.verdict { background: var(--paper); border: 1px solid var(--line); border-left: 5px solid var(--docpin);
+  border-radius: 10px; padding: 12px 16px; margin: 14px 0; }
+.warn { background: var(--paper); border: 1px solid var(--line); border-left: 5px solid var(--own);
+  border-radius: 10px; padding: 10px 16px; margin: 14px 0; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 16px 0; }
+.tile { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+.tile b { display: block; font-size: 30px; line-height: 1.1; }
+.tile span { color: var(--muted); font-size: 14px; }
+.tile.dp b { color: var(--docpin); } .tile.cl b { color: var(--claude); } .tile.ad b { color: var(--adapt); }
+.tile.un b { color: var(--unk); } .tile.gn b { color: var(--gen); }
+figure { margin: 16px 0; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+figure svg { width: 100%; height: auto; display: block; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.narrowfig svg { max-width: 520px; margin: 0 auto; }
+.split { display: grid; gap: 4px 22px; align-items: start; }
+@media (min-width: 900px) { .split { grid-template-columns: minmax(0, 1fr) 470px; } }
+table { border-collapse: collapse; width: 100%; background: var(--paper); font-size: 14.5px; }
+th, td { text-align: left; vertical-align: top; padding: 7px 9px; border-bottom: 1px solid var(--line);
+  overflow-wrap: break-word; }
+th { font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+table.lots th:nth-child(1) { width: 16%; } table.lots th:nth-child(2) { width: 46%; }
+code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: .9em; overflow-wrap: anywhere; }
+.tag { display: inline-block; font-size: 13px; font-weight: 700; padding: 0 8px; border-radius: 999px;
+  border: 1.5px solid currentColor; white-space: nowrap; margin: 0 4px 2px 0; }
+.tag.dp { color: var(--docpin); } .tag.cl { color: var(--claude); } .tag.un { color: var(--unk); }
+.tag.gn { color: var(--gen); } .tag.ad { color: var(--adapt); } .tag.ow { color: var(--own); }
+details { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin: 12px 0; }
+summary { cursor: pointer; font-weight: 600; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 10px 12px; font-size: 13.5px; line-height: 1.45; }
+ul.tight { margin: 6px 0; padding-left: 20px; } ul.tight li { margin: 3px 0; }
+/* repository tree */
+.tree { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 14px; line-height: 1.5; }
+.tree .row { display: flex; gap: 10px; align-items: baseline; padding: 2px 8px; border-left: 5px solid transparent; }
+.tree .row.dp { border-left-color: var(--docpin); } .tree .row.cl { border-left-color: var(--claude); }
+.tree .row.ex { border-left-color: var(--line); color: var(--muted); }
+.tree .row.new .p::after { content: " new"; font-family: system-ui, sans-serif; font-size: 11.5px; font-weight: 700;
+  color: var(--gen); border: 1.5px solid currentColor; border-radius: 999px; padding: 0 6px; margin-left: 6px;
+  display: inline-block; white-space: nowrap; }
+.tree .p { white-space: pre; flex: 0 0 auto; }
+.tree .d { font-family: system-ui, sans-serif; font-size: 13.5px; color: var(--muted); }
+@media (max-width: 640px) { .tree .row { flex-direction: column; gap: 0; } .tree .d { padding-left: 2ch; }
+  .tree .p { white-space: normal; overflow-wrap: anywhere; }
+  /* figures keep a readable body on a phone: they scroll sideways inside their frame */
+  figure.narrowfig { overflow-x: auto; } .narrowfig svg { min-width: 500px; } }
+.dec { border: 2px solid var(--adapt); border-left-width: 8px; border-radius: 12px;
+  padding: 4px 16px 10px; margin: 14px 0; background: var(--paper); }
+.dec h3 { margin: 12px 0 6px; }
+.dec.done { border: 1px solid var(--line); border-left: 6px solid var(--gen); }
+/* svg text: narrow figures are capped at 520 px, drawn at about 1 unit per pixel */
+.s14 { font-size: 14px; fill: var(--ink); } .s15 { font-size: 15px; fill: var(--ink); }
+.s16b { font-size: 16px; font-weight: 700; fill: var(--ink); }
+.mono { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; }
+.mut { fill: var(--muted); }
+.bn { font-size: 15px; font-weight: 700; fill: var(--paper); }
+.box { fill: var(--paper); stroke-width: 2; }
+.arr { fill: none; stroke-width: 2; }
+.dash { stroke-dasharray: 6 4; }
+body[data-level="1"] .l2 { display: none !important; }
+@media (max-width: 640px) {
+  h1 { font-size: 25px; } body { font-size: 15px; }
+  table, thead, tbody, tr, th, td { display: block; }
+  thead { display: none; }
+  tr { border-bottom: 1px solid var(--line); padding: 8px 0; }
+  td { border: none; padding: 2px 10px; }
+  td[data-label]::before { content: attr(data-label); display: block; font-size: 12.5px;
+    text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+}
+</style>
+</head>
+<body data-level="2">
+<main>
+<p class="lede">docpin · page de périmètre du 2026-10-12, tirée des décisions de <a href="empaqueter-le-workflow.html">Empaqueter le workflow</a> · rien n'est construit</p>
+<h1>Ce que le plugin public construira</h1>
+<p class="lede">Les décisions du 2026-10-09 traduites en pièces, en lots et en preuves, pour valider le périmètre
+avant d'écrire une ligne.</p>
+
+<div class="levels" role="group" aria-label="Profondeur de lecture">
+  <span>Profondeur :</span>
+  <button type="button" data-level="1" aria-pressed="false">1 · L'affirmation</button>
+  <button type="button" data-level="2" aria-pressed="true">2 · Le raisonnement</button>
+  <button type="button" data-level="3" aria-pressed="false">3 · Les preuves</button>
+</div>
+
+<nav class="toc">
+  <a href="#installer">1 · Installer</a>
+  <a href="#depot">2 · Le dépôt</a>
+  <a href="#demon">3 · Le démon</a>
+  <a href="#lots">4 · Les lots</a>
+  <a href="#hors">5 · Hors périmètre</a>
+  <a href="#choix">6 · Tes choix</a>
+  <a href="#suppose">7 · Supposé</a>
+</nav>
+
+<div class="verdict"><strong>En une phrase :</strong> le dépôt docpin devient une marketplace de deux plugins,
+<strong>docpin</strong> (la boucle et un skill) et <strong>la forme visuelle</strong> (le style et le contrôleur de
+documents, optionnel). Le travail se découpe en sept lots, dont le premier ne construit rien : il mesure les cinq
+choses que ce plan suppose sur les plugins. Deux choix te reviennent ; le reste découle de tes décisions.</div>
+
+<div class="tiles">
+  <div class="tile dp"><b>2</b><span>plugins dans une marketplace, le dépôt docpin</span></div>
+  <div class="tile gn"><b>2</b><span>commandes pour installer, au lieu de ≈ 8 gestes</span></div>
+  <div class="tile cl"><b>7</b><span>lots, chacun avec sa preuve</span></div>
+  <div class="tile un"><b>5</b><span>suppositions que le lot 0 mesure d'abord</span></div>
+  <div class="tile ad"><b>2</b><span>choix à toi</span></div>
+</div>
+
+<!-- ============================================================ 1 -->
+<h2 id="installer">1 · Ce que vit quelqu'un qui installe</h2>
+<div class="verdict"><strong>Affirmation :</strong> deux commandes, puis rien d'autre à faire tant qu'il
+n'a pas besoin d'un service système. Le démon démarre à la première écriture d'un document.</div>
+
+<figure class="narrowfig">
+<svg viewBox="0 0 520 560" role="img" aria-label="Cinq étapes, de l'installation au retour des notes">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+  </defs>
+  <!-- step 1 -->
+  <rect class="box" x="10" y="10" width="500" height="86" rx="10" stroke="var(--gen)"/>
+  <circle cx="40" cy="40" r="15" fill="var(--gen)"/><text class="bn" x="40" y="45" text-anchor="middle">1</text>
+  <text class="s16b" x="66" y="45">Ajouter la marketplace</text>
+  <text class="s14 mono" x="66" y="72">/plugin marketplace add elphono/docpin</text>
+  <line class="arr" x1="260" y1="96" x2="260" y2="120" stroke="var(--muted)" marker-end="url(#ah)"/>
+  <!-- step 2 -->
+  <rect class="box" x="10" y="122" width="500" height="96" rx="10" stroke="var(--gen)"/>
+  <circle cx="40" cy="152" r="15" fill="var(--gen)"/><text class="bn" x="40" y="157" text-anchor="middle">2</text>
+  <text class="s16b" x="66" y="157">Installer docpin</text>
+  <text class="s14 mono" x="66" y="182">/plugin install docpin@docpin</text>
+  <text class="s14 mut" x="66" y="204">un dialogue demande le port et les dossiers suivis</text>
+  <line class="arr" x1="260" y1="218" x2="260" y2="242" stroke="var(--muted)" marker-end="url(#ah)"/>
+  <!-- step 3 -->
+  <rect class="box" x="10" y="244" width="500" height="96" rx="10" stroke="var(--claude)"/>
+  <circle cx="40" cy="274" r="15" fill="var(--claude)"/><text class="bn" x="40" y="279" text-anchor="middle">3</text>
+  <text class="s16b" x="66" y="279">Une session écrit un document HTML</text>
+  <text class="s14 mut" x="66" y="304">le skill lui dit quoi produire ; le hook l'enregistre</text>
+  <text class="s14 mut" x="66" y="326">et lui demande de lancer l'attente des notes</text>
+  <line class="arr" x1="260" y1="340" x2="260" y2="364" stroke="var(--muted)" marker-end="url(#ah)"/>
+  <!-- step 4 -->
+  <rect class="box" x="10" y="366" width="500" height="96" rx="10" stroke="var(--docpin)"/>
+  <circle cx="40" cy="396" r="15" fill="var(--docpin)"/><text class="bn" x="40" y="401" text-anchor="middle">4</text>
+  <text class="s16b" x="66" y="401">Le démon démarre, s'il ne tournait pas</text>
+  <text class="s14 mut" x="66" y="426">la session donne le lien du document dans sa réponse</text>
+  <text class="s14 mut" x="66" y="448">le lecteur l'ouvre et pose ses notes (Alt+clic)</text>
+  <line class="arr" x1="260" y1="462" x2="260" y2="486" stroke="var(--muted)" marker-end="url(#ah)"/>
+  <!-- step 5 -->
+  <rect class="box" x="10" y="488" width="500" height="64" rx="10" stroke="var(--docpin)"/>
+  <circle cx="40" cy="520" r="15" fill="var(--docpin)"/><text class="bn" x="40" y="525" text-anchor="middle">5</text>
+  <text class="s16b" x="66" y="516">« Send to session »</text>
+  <text class="s14 mut" x="66" y="540">les notes reviennent à la conversation qui l'a écrit</text>
+</svg>
+<figcaption>Vert : les deux commandes de l'utilisateur. Bleu : Claude Code. Orange : docpin. Le service
+système (<code>annotate service</code>) reste un geste à part, pour qui veut un démon permanent.</figcaption>
+</figure>
+
+<!-- ============================================================ 2 -->
+<h2 id="depot">2 · Ce que contiendra le dépôt</h2>
+<div class="verdict"><strong>Affirmation :</strong> le plugin docpin est la racine du dépôt, parce qu'un plugin
+ne voit que les fichiers de son dossier et que le code Python y est déjà. La forme visuelle vit dans un
+sous-dossier.</div>
+
+<div class="tree" role="img" aria-label="Arborescence du dépôt après le travail">
+  <div class="row dp new"><span class="p">.claude-plugin/marketplace.json</span><span class="d">deux entrées : <code>docpin</code> (source <code>./</code>) et la forme visuelle</span></div>
+  <div class="row dp new"><span class="p">.claude-plugin/plugin.json</span><span class="d">manifeste de docpin, avec <code>userConfig</code> : port, dossiers suivis</span></div>
+  <div class="row dp new"><span class="p">hooks/hooks.json</span><span class="d">branche l'enregistreur sur <code>Write|Edit</code>, par <code>${CLAUDE_PLUGIN_ROOT}</code></span></div>
+  <div class="row dp"><span class="p">hooks/register-on-write.py</span><span class="d">l'enregistreur actuel, inchangé sur le fond</span></div>
+  <div class="row dp new"><span class="p">bin/annotate</span><span class="d">met <code>annotate</code> sur le PATH des sessions ; lance la copie stable (section 3)</span></div>
+  <div class="row dp new"><span class="p">skills/annotatable-documents/SKILL.md</span><span class="d">ce qu'une session produit, où, et qu'elle donne le lien</span></div>
+  <div class="row dp"><span class="p">src/annotate/…</span><span class="d">le démon, généralisé au lot 1</span></div>
+  <div class="row cl new"><span class="p">plugins/visual-first/.claude-plugin/plugin.json</span><span class="d">second plugin, optionnel</span></div>
+  <div class="row cl new"><span class="p">plugins/visual-first/output-styles/visual-first.md</span><span class="d">le style « visuel d'abord », en anglais, proposé et jamais imposé</span></div>
+  <div class="row cl new"><span class="p">plugins/visual-first/hooks/…</span><span class="d">le contrôleur de documents, qui demande à docpin ce qu'est un document</span></div>
+  <div class="row ex"><span class="p">tests/ · tools/ · docs/</span><span class="d">copiés avec le plugin, sans effet : rien ne les charge</span></div>
+</div>
+
+<details class="l2"><summary>Pourquoi la racine, et pas <code>plugins/docpin/</code></summary>
+<p>Claude Code copie le dossier d'un plugin dans son cache ; un fichier hors de ce dossier n'existe pas pour
+lui. Mettre docpin dans <code>plugins/docpin/</code> obligerait à y déplacer <code>src/</code>, donc à changer le
+<code>pyproject.toml</code>, la CI et tous les chemins du <code>CLAUDE.md</code>. La racine coûte seulement de
+copier <code>tests/</code> et <code>docs/</code> en plus, quelques centaines de Ko.</p>
+<p>La documentation officielle (page <code>plugins/publish</code>) décrit justement une entrée dont la source est
+<code>"./"</code>. Qu'un plugin racine puisse contenir le dossier d'un autre plugin de la même marketplace est
+<strong>lu, pas essayé</strong> : c'est la mesure 4 du lot 0.</p>
+</details>
+
+<!-- ============================================================ 3 -->
+<h2 id="demon">3 · Le démon ne tourne jamais depuis le dossier d'une version</h2>
+<div class="verdict"><strong>Affirmation :</strong> à chaque mise à jour, Claude Code installe le plugin dans un
+nouveau dossier et supprime l'ancien 14 jours plus tard. Le démon tourne donc depuis une copie stable, dans le
+dossier de données du plugin ; tes notes, elles, restent où elles sont.</div>
+
+<figure class="narrowfig">
+<svg viewBox="0 0 520 392" role="img" aria-label="Le dossier de version change, la copie stable non">
+  <defs>
+    <marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+  </defs>
+  <text class="s16b" x="10" y="22">Dossier de version</text>
+  <text class="s14 mono mut" x="190" y="22">${CLAUDE_PLUGIN_ROOT}</text>
+  <rect x="10" y="36" width="230" height="44" rx="8" fill="var(--unk-soft)" stroke="var(--unk)" stroke-width="2" class="dash"/>
+  <text class="s15" x="22" y="63">0.2.0 · supprimé à J+14</text>
+  <rect class="box" x="260" y="36" width="250" height="44" rx="8" stroke="var(--docpin)"/>
+  <text class="s15" x="272" y="63">0.2.1 · la version active</text>
+  <line class="arr" x1="385" y1="80" x2="385" y2="150" stroke="var(--muted)" marker-end="url(#ah2)"/>
+  <text class="s14 mut" x="372" y="110" text-anchor="end"><tspan class="mono">bin/annotate</tspan> la copie</text>
+  <text class="s14 mut" x="372" y="130" text-anchor="end">une fois par version</text>
+  <text class="s16b" x="10" y="174">Dossier de données du plugin</text>
+  <rect class="box" x="10" y="186" width="500" height="64" rx="8" stroke="var(--docpin)"/>
+  <text class="s14 mono" x="22" y="210">${CLAUDE_PLUGIN_DATA}/runtime/0.2.1/</text>
+  <text class="s14 mut" x="22" y="234">survit aux mises à jour du plugin</text>
+  <line class="arr" x1="260" y1="250" x2="260" y2="276" stroke="var(--muted)" marker-end="url(#ah2)"/>
+  <rect class="box" x="10" y="278" width="500" height="44" rx="8" stroke="var(--docpin)"/>
+  <text class="s15" x="22" y="305">démon et unité systemd : <tspan class="mono">python3 -m annotate.cli</tspan></text>
+  <rect class="box" x="10" y="338" width="500" height="44" rx="8" stroke="var(--gen)"/>
+  <text class="s15" x="22" y="365">notes et registre : <tspan class="mono">~/.local/share/annotate</tspan></text>
+</svg>
+<figcaption>Une nouvelle version écrit sa copie à côté de l'ancienne ; le démon qui tourne voit alors que son
+code a changé (le contrôle <code>stale</code> existant) et la page propose « Restart daemon ». Vert : ce qui ne
+bouge pas.</figcaption>
+</figure>
+<div>
+<p><strong>Pourquoi pas le dossier de données pour les notes aussi.</strong> Désinstaller un plugin peut effacer
+son dossier de données ; tes notes et tes copies de référence n'ont pas à partir avec lui. Elles restent sous
+<code>~/.local/share/annotate</code>, là où elles sont aujourd'hui : ton registre actuel continue tel quel.</p>
+<p><strong>Le démarrage à la demande</strong> (décision Q5) : <code>bin/annotate</code> interroge le port ; si rien
+ne répond, il lance le démon en arrière-plan ; si un démon d'une autre version répond, il le dit au lieu d'en lancer
+un second. Le service systemd reste disponible par <code>annotate service</code>, et il pointe sur la copie stable.</p>
+<p class="l2"><strong>Aucune dépendance ajoutée</strong> : la copie est un <code>shutil.copytree</code> de
+<code>src/annotate</code>, lancé avec le <code>python3</code> du système (≥ 3.12, vérifié au démarrage avec un message
+clair s'il manque).</p>
+</div>
+
+<!-- ============================================================ 4 -->
+<h2 id="lots">4 · Les sept lots, dans l'ordre</h2>
+<div class="verdict"><strong>Affirmation :</strong> on mesure d'abord, on déracine ensuite ce qui suppose ta
+machine, puis on empaquette. Les lots 3, 4 et 5 sont indépendants entre eux. Chaque lot se livre commité,
+poussé et prouvé.</div>
+
+<figure class="narrowfig">
+<svg viewBox="0 0 520 470" role="img" aria-label="Ordre des lots et leurs dépendances">
+  <defs>
+    <marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker>
+  </defs>
+  <rect x="60" y="10" width="400" height="58" rx="10" fill="var(--unk-soft)" stroke="var(--unk)" stroke-width="2" class="dash"/>
+  <text class="s16b" x="80" y="35">0 · Mesurer</text>
+  <text class="s14 mut" x="80" y="56">cinq suppositions sur les plugins, code jeté</text>
+  <line class="arr" x1="260" y1="68" x2="260" y2="90" stroke="var(--muted)" marker-end="url(#ah3)"/>
+  <rect class="box" x="60" y="92" width="400" height="58" rx="10" stroke="var(--docpin)"/>
+  <text class="s16b" x="80" y="117">1 · Déraciner</text>
+  <text class="s14 mut" x="80" y="138">ce qui suppose Windows, WSL ou ta machine</text>
+  <line class="arr" x1="260" y1="150" x2="260" y2="172" stroke="var(--muted)" marker-end="url(#ah3)"/>
+  <rect class="box" x="60" y="174" width="400" height="58" rx="10" stroke="var(--docpin)"/>
+  <text class="s16b" x="80" y="199">2 · Empaqueter docpin</text>
+  <text class="s14 mut" x="80" y="220">manifeste, hooks, bin/, copie stable</text>
+  <path class="arr" d="M150,232 L 90,272" stroke="var(--muted)" marker-end="url(#ah3)"/>
+  <line class="arr" x1="260" y1="232" x2="260" y2="272" stroke="var(--muted)" marker-end="url(#ah3)"/>
+  <path class="arr" d="M370,232 L 430,272" stroke="var(--muted)" marker-end="url(#ah3)"/>
+  <rect class="box" x="10" y="274" width="156" height="78" rx="10" stroke="var(--docpin)"/>
+  <text class="s16b" x="22" y="300">3 · Skill</text>
+  <text class="s14 mut" x="22" y="322">documents</text>
+  <text class="s14 mut" x="22" y="338">annotables</text>
+  <rect class="box" x="182" y="274" width="156" height="78" rx="10" stroke="var(--docpin)"/>
+  <text class="s16b" x="194" y="300">4 · Garde-fou</text>
+  <text class="s14 mut" x="194" y="322">de la boîte de</text>
+  <text class="s14 mut" x="194" y="338">réception</text>
+  <rect class="box" x="354" y="274" width="156" height="78" rx="10" stroke="var(--claude)"/>
+  <text class="s16b" x="366" y="300">5 · Forme</text>
+  <text class="s14 mut" x="366" y="322">visuelle</text>
+  <text class="s14 mut" x="366" y="338">(second plugin)</text>
+  <path class="arr" d="M88,352 L 170,392" stroke="var(--muted)" marker-end="url(#ah3)"/>
+  <line class="arr" x1="260" y1="352" x2="260" y2="390" stroke="var(--muted)" marker-end="url(#ah3)"/>
+  <path class="arr" d="M432,352 L 350,392" stroke="var(--muted)" marker-end="url(#ah3)" stroke-dasharray="6 4"/>
+  <rect x="60" y="392" width="400" height="66" rx="10" fill="var(--gen-soft)" stroke="var(--gen)" stroke-width="2"/>
+  <text class="s16b" x="80" y="418">6 · Publier et basculer</text>
+  <text class="s14 mut" x="80" y="440">tag, README, ta config passe au plugin (A1)</text>
+</svg>
+<figcaption>Gris pointillé : un lot qui ne laisse aucun code. Orange : plugin docpin. Bleu : plugin de la forme
+visuelle. La flèche pointillée du lot 5 dépend de ton choix C2 : il peut sortir avec la publication ou après.</figcaption>
+</figure>
+
+<table class="lots">
+<thead><tr><th>Lot</th><th>Ce qui est construit</th><th>La preuve exigée</th></tr></thead>
+<tbody>
+<tr><td><span class="tag un">0</span> Mesurer</td>
+<td>Un plugin jouet, installé dans un <code>CLAUDE_CONFIG_DIR</code> vide, pour mesurer les cinq points de la
+<a href="#suppose">section 7</a>. Le résultat remplace « lu » par « mesuré » dans cette page.</td>
+<td>les commandes et leurs sorties, recopiées ici ; si une mesure contredit le plan, le plan change avant le lot 1</td></tr>
+<tr><td><span class="tag dp">1</span> Déraciner</td>
+<td>Plus de dossier suivi par défaut (choisi à l'installation) ; commande du terminal par modèle et par plateforme ;
+ouverture du navigateur par <code>xdg-open</code>, <code>open</code> ou <code>webbrowser</code> ; lecture de
+<code>procStart</code> par plateforme ; <code>annotate open</code> sans argument ouvre la page d'accueil (T4).</td>
+<td>suite verte, <code>test_no_deployment_value_is_written_in_the_code</code> élargi, mutations ; et ton propre
+montage WSL marche toujours, vérifié sur un vrai envoi</td></tr>
+<tr><td><span class="tag dp">2</span> Empaqueter</td>
+<td>Manifestes, <code>hooks/hooks.json</code>, <code>bin/annotate</code>, copie stable et démarrage à la demande,
+<code>userConfig</code>. <code>claude plugin validate --strict</code> dans la CI.</td>
+<td>installation dans un home vide, puis passage de 0.2.0 à 0.2.1 et suppression de l'ancien dossier : la page
+est toujours servie, et le bandeau « Restart daemon » apparaît</td></tr>
+<tr><td><span class="tag dp">3</span> Skill</td>
+<td>Le skill « documents annotables », en anglais : un HTML autonome sous <code>docs/</code>, le lien du document
+dans la réponse, l'attente des notes en arrière-plan.</td>
+<td>un cas <code>claude plugin eval</code> : une demande de note de conception doit produire un HTML et donner son
+lien, et la même demande sans le plugin sert de témoin</td></tr>
+<tr><td><span class="tag dp">4</span> Garde-fou</td>
+<td>La décision T2 : docpin ne dépose dans la boîte de réception que pour les versions de Claude Code vérifiées ;
+sinon les notes restent à envoyer, avec la raison ; un bouton « Resend » rattrape un envoi perdu.</td>
+<td>tests et mutations ; la vérification d'une version se fait sur un vrai message capturé, comme le 2026-10-06</td></tr>
+<tr><td><span class="tag cl">5</span> Forme visuelle</td>
+<td>Le style « visuel d'abord » traduit en anglais neutre, sans tes seuils personnels ; le contrôleur de documents,
+qui demande à docpin si un fichier est un document (T1) et retombe sur <code>docs/</code> sans lui.</td>
+<td>les tests du contrôleur déplacés ici et éprouvés par mutation ; le style apparaît dans
+<code>/output-style</code> sans remplacer le tien</td></tr>
+<tr><td><span class="tag gn">6</span> Publier</td>
+<td>Section « Install » du README, ROADMAP, tag de version. Ta config passe de 13 pièces à 8 (A1) et tes deux
+machines installent le plugin.</td>
+<td>la seconde machine installée en suivant le README seul, sans aide de ma part</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ 5 -->
+<h2 id="hors">5 · Ce qui n'est pas dans le périmètre</h2>
+<table>
+<thead><tr><th>Exclu</th><th>Pourquoi</th><th>Où ça vit</th></tr></thead>
+<tbody>
+<tr><td>le skill d'infographies</td><td>ta décision du 2026-10-12 : plugin tiers, chacun l'installe s'il le veut</td><td>sa propre marketplace</td></tr>
+<tr><td>un paquet PyPI</td><td>Q2 : il vient après, pour qui n'utilise pas les plugins</td><td>ROADMAP, « Packaging »</td></tr>
+<tr><td>macOS testé</td><td>Q6 : annoncé « non testé » tant que personne ne l'a mesuré</td><td>README, « Status »</td></tr>
+<tr><td>un monitor de plugin à la place de la consigne d'attente</td><td>T3 : expérimental, absent en <code>-p</code>, tournerait dans chaque session</td><td>à réexaminer plus tard</td></tr>
+<tr><td>la pastille ailleurs que sous Windows</td><td>Q6 : facultative ; T4 donne la page d'accueil sans elle</td><td>inchangée</td></tr>
+<tr><td>surligner, entourer, barrer</td><td>la phase 2 de l'annotation, sans rapport avec l'empaquetage</td><td>ROADMAP, « Next » 2</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ 6 -->
+<h2 id="choix">6 · Tes choix</h2>
+<div class="verdict"><strong>Affirmation :</strong> deux questions seulement ne découlent pas de tes décisions
+du 2026-10-09. Chacune porte une recommandation ; une note sur ce bloc suffit à répondre.</div>
+
+<div class="dec">
+<h3>C1 · Les noms des plugins</h3>
+<p>Ils se tapent à l'installation (<code>docpin@docpin</code>) et apparaissent dans <code>/output-style</code>. Le
+document du 2026-10-09 les laissait provisoires.</p>
+<table>
+<thead><tr><th>Option</th><th>La boucle</th><th>La forme</th><th>Ce que ça donne</th></tr></thead>
+<tbody>
+<tr><td><strong>recommandée</strong></td><td><code>docpin</code></td><td><code>visual-first</code></td><td>le nom du style dit ce qu'il fait, et il est indépendant de docpin</td></tr>
+<tr><td>préfixée</td><td><code>docpin</code></td><td><code>docpin-style</code></td><td>on voit qu'ils vont ensemble ; mais la forme sert aussi sans docpin</td></tr>
+<tr><td>autre</td><td colspan="3">un nom de ton choix, dans ta note</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="dec">
+<h3>C2 · La forme visuelle sort-elle avec docpin ?</h3>
+<table>
+<thead><tr><th>Option</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
+<tbody>
+<tr><td><strong>après, recommandée</strong></td><td>docpin se publie dès les lots 3 et 4 ; le skill suffit à faire produire du HTML</td>
+<td>tes sessions gardent ta config actuelle un peu plus longtemps</td></tr>
+<tr><td>ensemble</td><td>l'expérience complète dès la première version</td>
+<td>la publication attend la traduction du style et le recâblage du contrôleur (T1), qui touche aussi ta config</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="dec done">
+<h3>Décidé ici, motif écrit : ta boucle de développement</h3>
+<p>Une fois le plugin installé (A1), c'est lui qui sert tes sessions, pas ton clone. Pour essayer une modification
+avant de la publier : <code>claude --plugin-dir ~/workspace/misc/annotate-workflow</code>, le plugin installé étant
+désactivé pour cette session. Que les deux ne se chargent pas en même temps (sinon chaque écriture serait
+enregistrée deux fois) est la mesure 5 du lot 0.</p>
+</div>
+
+<!-- ============================================================ 7 -->
+<h2 id="suppose">7 · Ce que ce plan suppose, et que le lot 0 mesure</h2>
+<table>
+<thead><tr><th>#</th><th>Supposition</th><th>Statut</th><th>Si elle est fausse</th></tr></thead>
+<tbody>
+<tr><td>1</td><td>le <code>bin/</code> d'un plugin est sur le PATH du shell de l'outil Bash</td><td><span class="tag ad">lu</span> doc <code>plugins/components</code></td><td>la consigne garde un chemin absolu, comme aujourd'hui</td></tr>
+<tr><td>2</td><td><code>${CLAUDE_PLUGIN_DATA}</code> survit à une mise à jour du plugin</td><td><span class="tag ad">lu</span> doc <code>plugins/loading</code></td><td>la copie stable va sous <code>~/.local/share/annotate/runtime/</code></td></tr>
+<tr><td>3</td><td>les hooks d'un plugin se déclenchent sur les écritures d'un sous-agent</td><td><span class="tag ow">non mesuré</span></td><td>le parcours du démon, toutes les 30 s, rattrape déjà ces fichiers</td></tr>
+<tr><td>4</td><td>un plugin racine peut contenir le dossier d'un autre plugin de la même marketplace</td><td><span class="tag ow">non mesuré</span></td><td>la forme visuelle part dans un dépôt à elle</td></tr>
+<tr><td>5</td><td><code>--plugin-dir</code> sur un plugin déjà installé ne charge pas ses hooks deux fois</td><td><span class="tag ow">non mesuré</span></td><td>la boucle de développement passe par un <code>CLAUDE_CONFIG_DIR</code> à part</td></tr>
+</tbody>
+</table>
+<details class="proof"><summary>Ce qui a été vérifié pour écrire cette page</summary>
+<ul class="tight">
+<li><code>claude --version</code> → <code>2.1.296</code> ; <code>claude plugin --help</code> liste <code>validate</code>
+(avec <code>--strict</code> pour la CI), <code>install</code>, <code>update</code>, <code>eval</code>, <code>tag</code> ;
+<code>claude --help</code> liste <code>--plugin-dir</code>.</li>
+<li>Les décisions citées (Q1 à Q9, T1 à T4, A1) sont lues dans <code>docs/empaqueter-le-workflow.html</code>,
+section 11, telles que commitées.</li>
+<li>Rien n'a été installé ni essayé : tout ce qui touche au comportement des plugins reste « lu » ou « non mesuré »
+jusqu'au lot 0.</li>
+</ul>
+</details>
+</main>
+<script>
+(function () {
+  var body = document.body;
+  var buttons = document.querySelectorAll('.levels button');
+  function setLevel(level) {
+    body.setAttribute('data-level', level);
+    buttons.forEach(function (b) { b.setAttribute('aria-pressed', b.dataset.level === level ? 'true' : 'false'); });
+    document.querySelectorAll('details.proof, details.l2').forEach(function (d) { d.open = level === '3'; });
+  }
+  buttons.forEach(function (b) { b.addEventListener('click', function () { setLevel(b.dataset.level); }); });
+  // Stacked tables on narrow screens: each cell carries its column name.
+  document.querySelectorAll('table').forEach(function (t) {
+    var heads = Array.prototype.map.call(t.querySelectorAll('thead th'), function (h) { return h.textContent.trim(); });
+    t.querySelectorAll('tbody tr').forEach(function (r) {
+      Array.prototype.forEach.call(r.children, function (c, i) { if (heads[i]) { c.setAttribute('data-label', heads[i]); } });
+    });
+  });
+})();
+</script>
+</body>
+</html>
