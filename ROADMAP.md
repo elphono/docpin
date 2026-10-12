@@ -4,7 +4,24 @@ What is shipped, what is next, and what is deliberately not on the list. Items m
 done)** have a written design in [docs/etude-reutilisation.html](docs/etude-reutilisation.html);
 items marked **(proposal)** are ideas, not commitments.
 
-## Shipped — v0.1
+## Shipped — v0.3
+
+- **A Claude Code plugin, and its own marketplace**: `/plugin install docpin --marketplace
+  elphono/docpin`. The plugin runs a stable copy of the code (never the version folder Claude Code
+  deletes 14 days after an update), starts the daemon on demand, and puts `annotate` on the sessions'
+  PATH. Installing, updating and the on-demand start were measured in an empty home directory.
+- **The annotatable-documents skill**: what a session writes, where, how it hands it over and answers
+  the notes. Its eval runs a session with and without the plugin (`claude plugin eval .`).
+- **visual-first**, an optional second plugin: an output style that draws before it writes, and a
+  check that sends a session back to a Markdown document, a page without a visual, or a page that
+  loads from the network. What is a document is docpin's answer (`annotate is-document`).
+- **Native Linux and macOS** (macOS untested): the browser through `xdg-open` / `open`, the terminal
+  tab through the first desktop terminal found or a `terminal` template in `config.toml`.
+- **The inbox route is guarded**: notes are posted only to a session whose peer protocol is one the
+  line format was captured under (2.1.289 and 2.1.296, protocol 1); **Resend** puts the last batch
+  back if it never arrived.
+
+## Shipped — v0.1 and v0.2
 
 - Hook on `Write|Edit` that registers a session's HTML documents with the session's id, and a daemon
   scan (every 30 s) for what Bash writes.
@@ -35,16 +52,17 @@ items marked **(proposal)** are ideas, not commitments.
    The tool is chosen in the bar, as in a screenshot tool — no gesture recognition. The prompt changes
    by one word per note.
 3. **Watch the inbox route.** Posting into an open session's inbox relies on a line format that Claude
-   Code does not document (captured on a real message, frozen by `tests/test_inbox.py`). Re-check it
-   on every Claude Code release, and switch to a documented interface if one appears.
-4. **Packaging.** Publish so that `uvx` / `pipx` can install it without a
-   clone.
+   Code does not document (captured on real messages, frozen by `tests/test_inbox.py`). Re-capture
+   it when `peerProtocol` changes, and switch to a documented interface if one appears.
+4. **A render check for documents** **(proposal)**: light, dark and phone-width captures of a document,
+   its horizontal overflow and the smallest text of its figures, run by the skill instead of looked at
+   by hand. Needs Playwright, declared by the plugin.
+5. **PyPI.** For whoever does not use Claude Code plugins: `uvx` / `pipx` without a clone.
 
 ## Later
 
-- **Native Linux and macOS** **(proposal)**. The daemon, the hook and routes A and B are plain Python
-  and HTTP. What ties the project to Windows is the terminal-tab fallback (`wt.exe`) and the tray icon;
-  a fallback per terminal emulator and a menu-bar icon would remove that.
+- **A menu-bar icon** on Linux and macOS **(proposal)**, as the tray icon does on Windows. Today
+  `annotate open` opens the home page there.
 - **A browser extension** **(design done, deferred)**, only for pages the daemon does not serve (an
   external site, a pull request). It would reuse the overlay script and the daemon API as they are.
   Not worth it until that need is real.

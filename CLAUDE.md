@@ -93,6 +93,19 @@ seul endroit où des notes deviennent envoyées) ; la page lit la copie et le fi
 ne retrouve pas. « Mark as read » (`POST …/baseline`) avance la référence. Une copie impossible à
 écrire **retire** la référence : comparer à une version plus ancienne marquerait comme neuf le déjà-lu.
 
+**Le dépôt est aussi une marketplace Claude Code** (2026-10-12, périmètre
+`docs/2026-10-12-perimetre-du-plugin.html`) : deux plugins, `docpin` à la racine (`.claude-plugin/`,
+`hooks/hooks.json`, `bin/annotate`, le skill `skills/annotatable-documents/`) et `visual-first` sous
+`plugins/visual-first/` (le style « visuel d'abord » en anglais, et `check-document.py`, qui demande à
+docpin ce qu'est un document). Un plugin ne voit que son dossier : docpin est donc la racine, là où
+vit `src/`. `bin/annotate` ne lance **jamais** le code du dossier de version, que Claude Code supprime
+14 jours après une mise à jour : il le copie une fois par contenu sous `runtime/<empreinte>/` du dossier
+de données (`runtime.py`), pointe `runtime/current` dessus et exécute la copie avec le `python3` du
+système ; le démon d'une copie devient `stale` quand `current` change. Il démarre le démon à la demande
+(`client.ensure_daemon`, par systemd si l'unité existe) pour les commandes qui en ont besoin, jamais pour
+`status`. **Chaque changement publié change la version** (`pyproject.toml`, `__init__.py`, les deux
+`plugin.json`, égales par test) : une version épinglée identique n'atteint pas les installés.
+
 L'étude qui a fixé ces choix, avec ce qui est repris de remarkable-sync et la phase 2, est
 `docs/etude-reutilisation.html`.
 
@@ -106,6 +119,9 @@ ANNOTATE_PLAYWRIGHT_DIR=<dossier dont node_modules contient playwright> \
 uv run ruff check src tests tools hooks bin/annotate plugins  # doit passer intégralement
 uv run mypy                              # doit passer intégralement
 uv run python tools/mutate.py            # campagne de mutation dirigée, sur une COPIE
+claude plugin validate --json . > r.json && python3 tools/check_plugin_report.py r.json
+claude plugin eval . --runs 1 --allow-tools Write Edit   # le skill, avec et sans plugin (payant)
+claude --plugin-dir .                    # une session qui charge le clone comme plugin
 
 uv run annotate register <chemin.html> [--session ID] [--cwd DIR]
 uv run annotate wait <id>                # dans une session, EN ARRIÈRE-PLAN : rend les notes
@@ -175,6 +191,11 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | référence identique au fichier → rien de dessiné ; un ajout, une modification, un retrait → une marque chacun ; une section qui porte une note non envoyée ne se replie jamais ; rien ne se replie si un changement n'a pas été retrouvé ; le repli ne déplace aucune ancre | `tests/browser/changes_check.mjs` |
 | hors WSL, le navigateur et l'onglet passent par les outils de la plateforme (`xdg-open`, `open`, terminal natif, ou le `terminal` de `config.toml`), jamais par ceux de Windows ; sans workspace, les `docs/` du home sont des documents, mais le home n'est jamais parcouru | `tests/test_platforms.py` |
 | aucune note n'est postée à une session ouverte sur un protocole non vérifié : elles restent à envoyer, avec la raison, et jamais d'onglet ; « Resend » ne remet que le dernier lot | `test_a_session_on_an_unchecked_protocol_gets_nothing_and_the_notes_stay`, `test_resend_puts_the_last_batch_back_and_posts_it_again` |
+| le plugin n'exécute jamais le code de son dossier de version ; une copie survit à la suppression de ce dossier ; trois copies gardées, jamais celle en service ; une nouvelle version rend `stale` le démon d'une copie plus ancienne | `test_the_launcher_runs_a_copy_of_the_code_outside_the_plugin_folder`, `test_a_copy_survives_the_plugin_folder_being_deleted`, `test_a_new_version_gets_a_copy_of_its_own_and_three_are_kept`, `test_a_daemon_running_a_copy_turns_stale_when_a_new_version_is_installed` |
+| la consigne nomme `annotate` sans chemin seulement quand il est sur le PATH de la session (hook de plugin, ou PATH) ; un dossier `annotate/` du projet ne remplace pas le paquet | `test_the_plugin_hook_tells_the_session_to_run_annotate_by_name`, `test_a_launcher_off_the_path_is_called_back_by_its_own_path`, `test_a_project_folder_named_annotate_cannot_stand_in_for_the_package` |
+| le démarrage à la demande ne vise que les commandes qui en ont besoin, et ne lance jamais un second démon | `test_the_launcher_starts_the_daemon_only_for_commands_that_need_it`, `test_a_running_daemon_is_never_started_twice` |
+| les manifestes portent la version du paquet ; Claude Code valide la marketplace sans autre avertissement que ce `CLAUDE.md` | `test_every_manifest_carries_the_package_version`, job `plugin` de la CI |
+| le contrôle de visual-first bloque un livrable Markdown et un HTML sans visuel (un Mermaid n'en est pas un), avertit au-delà de 4 paragraphes par visuel et sur une ressource réseau, et demande à docpin, par sa copie stable, ce qu'est un document | `tests/test_visual_first.py` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 
@@ -251,6 +272,16 @@ copie du dépôt et exige que la suite tombe.
   changements. Le test du témoin lisait la page trop tôt et passait sans rien voir (mutation
   `witness-draws` survivante, 2026-10-12) ; l'overlay publie désormais `data-changes` sur
   `annotate-root` (`pending`, `none`, `shown`, `error`), et c'est là qu'on attend.
+- **Le `bin/` d'un plugin est sur le PATH de l'outil Bash, pas sur celui d'un hook d'un autre plugin**
+  (mesuré le 2026-10-12, sessions de test dans un home vide) : le contrôle de visual-first ne trouvait
+  pas `annotate` et retombait sans bruit sur la règle `docs/`. Il passe désormais par la copie stable
+  (`runtime/current`), dont l'emplacement ne dépend d'aucun plugin. Les variables `CLAUDE_PLUGIN_*`
+  n'arrivent pas non plus aux commandes de l'outil Bash : `bin/annotate` trouve tout par son propre
+  chemin. Et `--plugin-dir` sur un plugin installé le remplace pour la session, sans doubler ses hooks.
+- **Une consigne `annotate wait` sans chemin casse un montage par clone** : le hook de la config
+  synchronisée passe par `bin/annotate`, mais sans plugin ce `bin/` n'est pas sur le PATH des sessions.
+  Attrapé avant de servir ; le lanceur ne se nomme par son nom que si `CLAUDE_PLUGIN_ROOT` est posé ou
+  si le `annotate` du PATH est lui-même.
 - **Le home n'est jamais parcouru** : mesuré le 2026-10-12, un passage sur le home d'un poste de
   développeur prend 33,6 s, contre 0,3 s pour le workspace, et le démon passe toutes les 30 s. Sans
   workspace, le dossier par défaut est donc le home en `scan: false` : le hook y prend les `docs/`,
