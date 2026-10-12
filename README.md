@@ -100,6 +100,9 @@ stays out until it is written again.
 3. **Alt+click** anywhere to pin a note. Select text first and the note quotes exactly that selection.
 4. **Send to session** (the bar, the home page, the tray, or `annotate send <id>`). Only notes that were
    never sent go out.
+5. When the session has corrected the document, reopen it: what changed since your send is marked
+   (new, changed, removed), sections you already read fold into one line, and ▲ ▼ walk the changes.
+   **Mark as read** makes the version on screen the new reference.
 
 The home page groups documents by session — its title, then its folder — and the sessions by the
 git repository they run in; it carries every control:

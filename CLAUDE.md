@@ -84,6 +84,15 @@ contient le dossier où la session tourne (`registry.repository_of`, `.git` doss
 jamais au-dessus du home), sinon ce dossier lui-même, présenté comme « Folder ». C'est le dossier
 de la **session** qui compte, pas celui du document.
 
+**La page met en avant ce qui a changé depuis le dernier envoi** (2026-10-12, spec
+`docs/2026-10-12-mise-en-avant-des-mises-a-jour.html`). Chaque envoi copie le fichier dans
+`baselines/<id>.html` du dossier de données (`registry.take_baseline`, appelé par `Sender._settle`,
+seul endroit où des notes deviennent envoyées) ; la page lit la copie et le fichier par
+`GET /api/docs/<id>/baseline`, les compare bloc à bloc dans le navigateur (`static/diff.js`, pur), et
+`static/changes.js` marque le nouveau et le modifié, replie les sections inchangées, compte ce qu'il
+ne retrouve pas. « Mark as read » (`POST …/baseline`) avance la référence. Une copie impossible à
+écrire **retire** la référence : comparer à une version plus ancienne marquerait comme neuf le déjà-lu.
+
 L'étude qui a fixé ces choix, avec ce qui est repris de remarkable-sync et la phase 2, est
 `docs/etude-reutilisation.html`.
 
@@ -162,6 +171,8 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | un document ne se rattache qu'à une conversation que `claude --resume` trouverait ; le rattachement écrit `session_id`, sans toucher au statut ni garder un worktree disparu | `test_attaching_a_document_writes_its_session_and_moves_it_to_that_group`, `test_a_session_this_machine_cannot_resume_is_refused_with_a_400`, `test_an_attach_keeps_the_status_and_never_a_deleted_worktree_folder` |
 | la liste des sessions ne propose que des conversations reprenables, jamais un sous-agent, les ouvertes d'abord, bornée sans couper une session ouverte | `test_the_list_offers_only_resumable_conversations_and_never_a_subagent`, `test_open_sessions_come_first_then_the_most_recently_active`, `test_the_list_is_bounded_and_never_cuts_an_open_session` |
 | une session se range sous le dépôt qui contient son dossier (sous-dossier et worktree compris), jamais sous un dépôt du home ; les sessions d'un dépôt se regroupent, les documents sans session restent à part, en dernier | `test_each_session_group_names_the_repository_it_works_in`, `test_a_repository_in_the_home_directory_holds_no_session`, `tests/browser/index_check.mjs` |
+| la copie de référence est prise à chaque envoi, jamais à côté du document ; un envoi refusé la garde, une copie impossible la retire | `test_a_send_keeps_the_document_as_it_was_as_the_reference`, `test_a_refused_send_keeps_the_previous_reference`, `test_a_reference_that_cannot_be_written_is_removed_and_said`, `test_the_reference_never_lives_next_to_the_document` |
+| référence identique au fichier → rien de dessiné ; un ajout, une modification, un retrait → une marque chacun ; une section qui porte une note non envoyée ne se replie jamais ; rien ne se replie si un changement n'a pas été retrouvé ; le repli ne déplace aucune ancre | `tests/browser/changes_check.mjs` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 
@@ -227,6 +238,14 @@ copie du dépôt et exige que la suite tombe.
   `/api/docs`) ; la page affiche alors un bandeau « Restart daemon », traite un démon qui ne dit pas
   `stale` comme périmé, et se rabat sur une liste à plat plutôt que d'inventer des groupes.
   `test_a_daemon_says_when_its_code_changed_on_disk_since_it_started`, `index_check.mjs`.
+- **La page ne reçoit que des classes et `<annotate-fold>`, jamais un `div` ou un `p`** : les épingles
+  s'ancrent en `nth-of-type`, qui ne compte que les frères de même balise. Un `p` inséré pour replier
+  décalait l'ancre de la note suivante (mutation `fold-shifts-anchors`). Étiquettes, pastilles
+  « removed » et ancien texte vivent dans la couche de l'overlay.
+- **La barre s'affiche avant la fin de la comparaison** : son texte ne dit rien de l'état des
+  changements. Le test du témoin lisait la page trop tôt et passait sans rien voir (mutation
+  `witness-draws` survivante, 2026-10-12) ; l'overlay publie désormais `data-changes` sur
+  `annotate-root` (`pending`, `none`, `shown`, `error`), et c'est là qu'on attend.
 - **Une correction après livraison vaut réponse** : le hook ré-enregistre le document à chaque
   écriture, et `registry.register` fait alors passer `delivered` à `answered`. La barre du
   navigateur compare de son côté la date du fichier et propose « Reload ».

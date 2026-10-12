@@ -1262,3 +1262,15 @@ Et dans « Ce qui n'est pas évident » : la ligne sur `<annotate-fold>` et `nth
 - [ ] **Step 4: vitrine** — `README.md` : une phrase sous la description de l'overlay ; `ROADMAP.md` : l'entrée passe en « done ». En anglais.
 
 - [ ] **Step 5: tout repasser, commit, push** — suite par défaut, navigateur, ruff, mypy ; `git commit -m "test: mutations et invariants de la mise en avant des changements"` ; `git push`.
+
+---
+
+## Écarts constatés à l'exécution (2026-10-12)
+
+| Écart | Pourquoi | Ce qui le tient |
+|---|---|---|
+| barre latérale des blocs marqués en ombre **extérieure** (`-6px 0 0`) au lieu de `inset 4px` | regardé rendu : la barre intérieure recouvrait la première lettre | capture `changes-folded.png` |
+| pastille « removed » à **gauche**, sous le bloc, au lieu du bord droit | regardé rendu : au bord droit, elle passait sous la barre de l'overlay | capture `changes-removed.png` |
+| `white-space: nowrap` sur les étiquettes de la couche | la couche fait 0 px de large : la pastille se cassait mot par mot | capture |
+| `data-changes` sur `annotate-root` (`pending`, `none`, `shown`, `error`) | la barre s'affiche avant la fin de la comparaison : le témoin lisait trop tôt, et la mutation `witness-draws` survivait | mutation `witness-draws` tuée |
+| étape 10 : attente sur `page.waitForNavigation()` | toutes les conditions d'attente étaient déjà vraies sur la page d'avant le rechargement | test navigateur |

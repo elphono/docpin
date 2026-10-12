@@ -179,9 +179,14 @@ try {
     page.evaluate(() => [...document.querySelector('annotate-root').shadowRoot
       .querySelectorAll('.chg-actions button')].find((b) => b.textContent === 'Mark as read').click()),
   ]);
-  await page.waitForSelector('annotate-root', { state: 'attached' });
-  await page.waitForFunction(() => document.querySelector('annotate-root') &&
-    document.querySelector('annotate-root').shadowRoot.querySelector('.bar').textContent.includes('to send'));
+  // The bar shows "to send" BEFORE the comparison ends: wait on its own state.
+  await page.waitForFunction(() => {
+    const host = document.querySelector('annotate-root');
+    return host && host.dataset.changes && host.dataset.changes !== 'pending';
+  });
+  if (await page.evaluate(() => document.querySelector('annotate-root').dataset.changes) !== 'none') {
+    fail('after Mark as read, the comparison state is not "none"');
+  }
   const witness = await page.evaluate(() => document.querySelectorAll('.annotate-new,.annotate-changed,annotate-fold,.annotate-dim').length);
   if (witness || (await barText()).includes('Changes since')) fail('after Mark as read: ' + witness + ' marks');
   step('Mark as read: no mark, no fold, no panel');

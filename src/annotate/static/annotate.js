@@ -61,6 +61,9 @@
   const layer = root.querySelector('.layer');
   const bar = root.querySelector('.bar');
   document.body.appendChild(host);
+  // Where the comparison with the last send stands: pending, none, shown or
+  // error. The bar renders before it ends, so the bar says nothing about it.
+  host.dataset.changes = 'pending';
 
   const make = (name, cls, text) => {
     const node = document.createElement(name);
@@ -231,12 +234,13 @@
   async function loadChanges() {
     const D = window.__annotateDiff;
     const C = window.__annotateChanges;
-    if (!entry || !entry.baseline_at || !D || !C) return;
+    if (!entry || !entry.baseline_at || !D || !C) { host.dataset.changes = 'none'; return; }
     let data;
     try {
       data = await call('GET', '/baseline');
     } catch (err) {
       message = 'Cannot compare with your last send: ' + err.message;
+      host.dataset.changes = 'error';
       return;
     }
     changeView = C.apply(D.compare(data.reference, data.current, document), {
@@ -245,6 +249,7 @@
       changed: () => render(),
       markRead,
     });
+    host.dataset.changes = changeView ? 'shown' : 'none';
     const aimed = location.hash && document.getElementById(decodeURIComponent(location.hash.slice(1)));
     if (changeView && aimed) { changeView.reveal(aimed); aimed.scrollIntoView(); }
   }
