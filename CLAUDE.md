@@ -2,8 +2,9 @@
 
 **Le dépôt est public** (<https://github.com/elphono/docpin>). Il s'est appelé `annotate-workflow`, puis `redmargin`
 (2026-10-06), avant `docpin` : un nom qui dit ce que l'outil fait. La commande reste `annotate` et le paquet Python aussi ; le dossier local garde l'ancien
-nom, parce que le renommer casserait ce qui en porte le chemin — shebangs du `.venv`, unité systemd,
-hook de `~/.claude/settings.json`, raccourci Démarrage de la pastille. Le README et la ROADMAP sont
+nom, parce que le renommer casserait ce qui en porte le chemin — les shebangs du `.venv`. Sur la
+machine de l'auteur, l'unité systemd et le raccourci de la pastille passent par le plugin depuis le
+2026-10-12, et aucun hook ne pointe plus le clone. Le README et la ROADMAP sont
 la vitrine ; ce fichier est le mode d'emploi de qui modifie le code.
 
 Successeur du pont papier de remarkable-sync (dépôt privé de l'auteur), sans tablette. **Le besoin** : quand une
