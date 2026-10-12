@@ -25,8 +25,15 @@ inbox socket"). A message wakes an idle session, which starts a turn with it.
   took the line is all the daemon can know, so the notes count as delivered
   and nothing reaches the session (reproduced 2026-10-12 with a socket that
   reads and drops; `test_an_inbox_that_takes_the_line_and_ignores_it_counts_as_delivered`).
-  What closes it is planned, not built: post only for the Claude Code versions
-  whose format was checked, and a Resend for a batch that never arrived.
+  Two mechanisms close it (decision T2, 2026-10-09). **The daemon posts only
+  to a session whose `peerProtocol` is one the format was checked under**
+  (`VERIFIED_PROTOCOLS`): a real `SendMessage` was captured into a witness
+  socket under 2.1.289 (2026-10-06) and again under 2.1.296 (2026-10-12),
+  same line, both protocol 1. The registry field, not the version, is the
+  gate: the version changed seven times in those six days, the protocol never
+  (2.1.121 to 2.1.296, every entry on the author's machine). And **"Resend"**
+  puts the last batch back to send (`registry.unmark_sent`) when it never
+  arrived.
 - **No `from-mode`**: that attribute is how a sender claims its permission
   class. The daemon claims none, so a session that bypasses permission
   prompts HOLDS the message behind an Approve / Deny dialog. That is the
@@ -45,6 +52,9 @@ from typing import Any
 
 SENDER_NAME = "annotate"
 CONNECT_TIMEOUT = 5.0
+# The `peerProtocol` values of ~/.claude/sessions/<pid>.json under which the
+# line format of `line()` was captured from a real Claude Code (see above).
+VERIFIED_PROTOCOLS = frozenset({1})
 
 
 class InboxError(Exception):
@@ -99,6 +109,12 @@ def open_session_ids() -> set[str]:
     """The sessions that are open right now, by the same test as
     `open_sessions`: open on the index page means a send would post into it."""
     return {e["sessionId"] for e in _live_entries()}
+
+
+def verified(entry: dict[str, Any]) -> bool:
+    """True if docpin knows how this session's inbox reads a message."""
+    protocol = entry.get("peerProtocol")
+    return isinstance(protocol, int) and protocol in VERIFIED_PROTOCOLS
 
 
 def line(text: str) -> bytes:

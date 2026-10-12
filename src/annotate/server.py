@@ -14,6 +14,7 @@
     PUT    /api/docs/<id>/annotations        replace them (status -> annotated)
     POST   /api/docs/<id>/send               hand unsent notes to a session
     POST   /api/docs/<id>/new-session        same, in a NEW session (terminal tab)
+    POST   /api/docs/<id>/resend             the last batch back to send, then send
     POST   /api/docs/<id>/wait               held until notes come (`annotate wait`)
     GET    /api/docs/<id>/baseline           the reference (the file at the last send)
                                              and the file now, raw: the page compares them
@@ -400,6 +401,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(HTTPStatus.OK, {"annotations": items})
         if method == "POST" and action in ("send", "new-session"):
             result = self.server.sender.dispatch(doc_id, fresh=action == "new-session")
+            return self._json(HTTPStatus.OK, {**result, "message": sender.describe(result)})
+        if method == "POST" and action == "resend":
+            result = self.server.sender.resend(doc_id)
             return self._json(HTTPStatus.OK, {**result, "message": sender.describe(result)})
         if method == "POST" and action == "wait":
             return self._wait(doc_id)

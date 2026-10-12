@@ -419,6 +419,14 @@
     fresh.title = 'Open the notes in a NEW Claude Code session, in a terminal tab';
     fresh.addEventListener('click', () => trigger('new-session'));
     actions.append(send, fresh);
+    // Notes sent, none waiting: the batch may not have reached the session
+    // (an inbox can take a message Claude Code then ignores, inbox.py).
+    if (entry && entry.sent_at && !annotations.some((a) => !a.sent_at)) {
+      const again = make('button', '', 'Resend');
+      again.title = 'Send the last batch of notes again, if the session never got it';
+      again.addEventListener('click', () => trigger('resend'));
+      actions.append(again);
+    }
     if (changed) {
       const reload = make('button', 'primary', 'Reload');
       reload.title = 'The document changed on disk since this page was loaded';

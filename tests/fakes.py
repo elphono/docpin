@@ -89,16 +89,18 @@ def read_log(log) -> list:
 
 def register_session(session_id: str, socket_path: Path, *, pid: int | None = None,
                      proc_start: str | None = None, name: str = "session-c1",
-                     updated: int = 1) -> None:
+                     updated: int = 1, protocol: object = 1,
+                     version: str = "2.1.296") -> None:
     """An entry of the (isolated) `~/.claude/sessions`, as Claude Code writes
-    it for an open session; by default a LIVE one: this test process."""
+    it for an open session; by default a LIVE one: this test process, on a
+    peer protocol whose inbox format was checked (inbox.VERIFIED_PROTOCOLS)."""
     pid = os.getpid() if pid is None else pid
     start = inbox._proc_start(os.getpid()) if proc_start is None else proc_start
     inbox.sessions_dir().mkdir(parents=True, exist_ok=True)
     (inbox.sessions_dir() / f"{pid}-{name}.json").write_text(json.dumps({
         "pid": pid, "sessionId": session_id, "procStart": start, "name": name,
         "messagingSocketPath": str(socket_path), "kind": "interactive",
-        "updatedAt": updated}))
+        "updatedAt": updated, "version": version, "peerProtocol": protocol}))
 
 
 def transcript(projects: Path, session: str, *, folder: str = "-home-x-repo",

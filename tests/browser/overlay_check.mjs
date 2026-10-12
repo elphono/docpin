@@ -100,6 +100,9 @@ try {
   const listening = await page.locator('.listening').textContent();
   if (!listening.startsWith('An open session listens')) fail('listening line: ' + listening);
   step('bar says: ' + listening);
+  if (await page.locator('.bar-actions button', { hasText: 'Resend' }).count()) {
+    fail('Resend offered before anything was sent');
+  }
   await page.screenshot({ path: join(outDir, 'overlay-before-send.png'), fullPage: false });
 
   // 6. Send to session: the open session receives the notes, the bar says so.
@@ -114,6 +117,10 @@ try {
   const sentPin = await page.locator('.pin.sent').count();
   if (sentPin !== 2) fail('the sent pins are not greyed');
   step('sent pins greyed');
+  if ((await page.locator('.bar-actions button', { hasText: 'Resend' }).count()) !== 1) {
+    fail('Resend not offered once every note is sent');
+  }
+  step('Resend offered once every note is sent');
 
   // 6b. The session edits the document: the bar offers to reload.
   appendFileSync(docPath, '\n<!-- edited by the session -->\n');

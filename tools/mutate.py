@@ -301,13 +301,21 @@ MUTATIONS = (
              "    return code_dir\n",
              "a daemon on a copy turns stale when a new version is installed"),
     Mutation("autostart-everywhere", "src/annotate/cli.py",
-             'AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session"})',
-             'AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session", "status"})',
+             'AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session", "resend"})',
+             'AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session", "resend", "status"})',
              "status reports and never starts a daemon"),
     Mutation("prune-current", "src/annotate/runtime.py",
              "    for old in [p for p in copies if p.name != keep][KEEP - 1:]:\n",
              "    for old in copies[KEEP - 1:]:\n",
              "the copy in use is never pruned"),
+    Mutation("inbox-unchecked-protocol", "src/annotate/sender.py",
+             "            if not inbox.verified(target):\n",
+             "            if False:\n",
+             "nothing is posted to a session on an unchecked peer protocol"),
+    Mutation("resend-everything", "src/annotate/registry.py",
+             '            if item.get("sent_at") == stamp:\n',
+             '            if item.get("sent_at"):\n',
+             "Resend puts back the last batch only"),
 )
 
 

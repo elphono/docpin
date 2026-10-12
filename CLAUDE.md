@@ -109,7 +109,7 @@ uv run python tools/mutate.py            # campagne de mutation dirigée, sur un
 
 uv run annotate register <chemin.html> [--session ID] [--cwd DIR]
 uv run annotate wait <id>                # dans une session, EN ARRIÈRE-PLAN : rend les notes
-uv run annotate list | open <id> | send <id> | new-session <id> | forget <id> [--delete]
+uv run annotate list | open [<id>] | send <id> | new-session <id> | resend <id> | forget <id> [--delete]
 uv run annotate sessions                 # les conversations auxquelles rattacher un document
 uv run annotate attach <id> <session> [--cwd DIR] | detach <id>
 uv run annotate folders [add|remove <dossier>]   # les dossiers suivis
@@ -174,6 +174,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | la copie de référence est prise à chaque envoi, jamais à côté du document ; un envoi refusé la garde, une copie impossible la retire | `test_a_send_keeps_the_document_as_it_was_as_the_reference`, `test_a_refused_send_keeps_the_previous_reference`, `test_a_reference_that_cannot_be_written_is_removed_and_said`, `test_the_reference_never_lives_next_to_the_document` |
 | référence identique au fichier → rien de dessiné ; un ajout, une modification, un retrait → une marque chacun ; une section qui porte une note non envoyée ne se replie jamais ; rien ne se replie si un changement n'a pas été retrouvé ; le repli ne déplace aucune ancre | `tests/browser/changes_check.mjs` |
 | hors WSL, le navigateur et l'onglet passent par les outils de la plateforme (`xdg-open`, `open`, terminal natif, ou le `terminal` de `config.toml`), jamais par ceux de Windows ; sans workspace, les `docs/` du home sont des documents, mais le home n'est jamais parcouru | `tests/test_platforms.py` |
+| aucune note n'est postée à une session ouverte sur un protocole non vérifié : elles restent à envoyer, avec la raison, et jamais d'onglet ; « Resend » ne remet que le dernier lot | `test_a_session_on_an_unchecked_protocol_gets_nothing_and_the_notes_stay`, `test_resend_puts_the_last_batch_back_and_posts_it_again` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 
@@ -213,8 +214,11 @@ copie du dépôt et exige que la suite tombe.
   à envoyer, sans onglet. **Si elle accepte la ligne et que Claude Code l'ignore** (format changé
   par une mise à jour), le démon ne peut pas le voir : les notes comptent comme livrées et
   n'arrivent nulle part (reproduit le 2026-10-12, figé par
-  `test_an_inbox_that_takes_the_line_and_ignores_it_counts_as_delivered`). La parade est prévue,
-  pas codée : ne poster que pour les versions vérifiées, et un « Renvoyer » (`unmark_sent`).
+  `test_an_inbox_that_takes_the_line_and_ignores_it_counts_as_delivered`). Deux parades, codées le
+  même jour : le démon ne poste qu'à une session dont le `peerProtocol` est un protocole sous lequel
+  le format a été capturé sur un vrai `SendMessage` (2.1.289 le 2026-10-06, 2.1.296 le 2026-10-12,
+  protocole 1 les deux fois) — le protocole et non la version, qui a changé sept fois en six jours ;
+  et « Resend » (`annotate resend`, `Sender.resend`) remet le dernier lot à envoyer et le renvoie.
 - **`wt.exe` coupe sa ligne de commande au `;`** (mesuré le 2026-10-05 : un `bash -c 'a; b'`
   n'a exécuté que la première moitié). L'onglet lance donc un script écrit sous le dossier de
   données, et le prompt passe par un fichier, jamais par la ligne de commande.

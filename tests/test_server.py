@@ -118,6 +118,18 @@ def test_send_without_a_listener_opens_a_tab(daemon, make_doc):
     assert len(daemon.opener.calls) == 1
 
 
+def test_resend_through_the_daemon_sends_the_last_batch_again(daemon, make_doc):
+    doc_id = registry.register(make_doc("<p>Hello</p>"), session="s0")["id"]
+    assert daemon.request("POST", f"/api/docs/{doc_id}/resend")[0] == 409  # nothing sent
+    daemon.request("PUT", f"/api/docs/{doc_id}/annotations",
+                   [{"id": "n1", "selector": "body", "quote": "", "note": "x"}])
+    daemon.request("POST", f"/api/docs/{doc_id}/send")
+    status, body = daemon.request("POST", f"/api/docs/{doc_id}/resend")
+    assert status == 200 and body["count"] == 1 and "1 note(s)" in body["message"]
+    assert len(daemon.opener.calls) == 2
+    assert "x" in daemon.opener.calls[1]["prompt"]
+
+
 def _hold(daemon, doc_id, body=None):
     """A real `wait` request on its own connection: (thread, box)."""
     box: dict[str, object] = {}

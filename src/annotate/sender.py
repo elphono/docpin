@@ -132,6 +132,13 @@ class Sender:
         of 2026-10-06). The notes then stay sendable, with the reason."""
         errors = []
         for target in opened:                 # most recently active first
+            if not inbox.verified(target):
+                errors.append(
+                    f"Claude Code {target.get('version') or '(unknown version)'} "
+                    f"(peer protocol {target.get('peerProtocol')!r}) is not one whose "
+                    f"inbox format docpin checked: in that session, run "
+                    f"`{prompt.wait_command(doc_id)}` in the background, then send again")
+                continue
             try:
                 inbox.post(target["messagingSocketPath"], text)
             except inbox.InboxError as exc:
@@ -145,8 +152,20 @@ class Sender:
                     "session": str(target.get("sessionId", "")), "name": name}
         reason = "; ".join(errors)
         registry.update(doc_id, last_error=reason[:500])
-        raise SendError(f"the session is open but its inbox refused the notes "
+        raise SendError(f"the session is open but its inbox did not take the notes "
                         f"(they stay to send): {reason}")
+
+    def resend(self, doc_id: str) -> dict[str, Any]:
+        """Put the last batch back to send, then send it: for notes an inbox
+        took and Claude Code never showed (inbox.py). Notes added since then
+        go with them."""
+        with self._lock:
+            stamp = registry.get(doc_id).get("sent_at") or ""
+            if not stamp:
+                raise NothingToSend(f"{doc_id}: nothing was sent yet, so nothing to resend")
+            count = registry.unmark_sent(doc_id, stamp)
+            log.info("%s: %d note(s) of the batch %s put back to send", doc_id, count, stamp)
+            return self._dispatch(doc_id, False)
 
     def _build(self, entry: dict[str, Any], items: list[dict[str, Any]],
                fresh: bool) -> str:

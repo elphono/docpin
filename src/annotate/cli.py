@@ -6,6 +6,7 @@
     annotate open [<id>]
     annotate send <id>
     annotate new-session <id>
+    annotate resend <id>
     annotate forget <id> [--delete]
     annotate sessions
     annotate attach <id> <session> [--cwd DIR]
@@ -144,6 +145,10 @@ def cmd_send(args: argparse.Namespace, cfg: config.Config) -> int:
 
 def cmd_new_session(args: argparse.Namespace, cfg: config.Config) -> int:
     return _post(cfg, args.id, "new-session")
+
+
+def cmd_resend(args: argparse.Namespace, cfg: config.Config) -> int:
+    return _post(cfg, args.id, "resend")
 
 
 def cmd_forget(args: argparse.Namespace, cfg: config.Config) -> int:
@@ -296,7 +301,9 @@ def parser() -> argparse.ArgumentParser:
 
     for name, run, text in (("send", cmd_send, "hand the unsent notes to a session"),
                             ("new-session", cmd_new_session,
-                             "open the unsent notes in a NEW session (terminal tab)")):
+                             "open the unsent notes in a NEW session (terminal tab)"),
+                            ("resend", cmd_resend,
+                             "send the last batch again (it never reached the session)")):
         p = sub.add_parser(name, help=text)
         p.add_argument("id")
         p.set_defaults(run=run)
@@ -349,7 +356,7 @@ def parser() -> argparse.ArgumentParser:
 
 # The commands that need a daemon, started on demand when the plugin's
 # `bin/annotate` launched them (decision Q5). `status` reports, it never starts.
-AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session"})
+AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session", "resend"})
 
 
 def _autostart(args: argparse.Namespace, cfg: config.Config) -> None:

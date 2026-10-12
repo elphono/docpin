@@ -69,6 +69,74 @@ def test_the_line_is_the_one_claude_code_writes_and_claims_no_permission_class()
     assert "from-mode" not in content, "claiming a class would skip the approval dialog"
 
 
+# What Claude Code 2.1.296 wrote into a witness inbox on 2026-10-12, from a
+# real SendMessage (the socket path and session name are shortened).
+CAPTURED_2_1_296 = (
+    '{"msgV":1,"msg_id":"ab5d2124-4a9a-4d8c-a9f9-0057060def78","type":"user",'
+    '"message":{"role":"user","content":"<cross-session-message from=\\"uds:/run/x.sock\\" '
+    'from-name=\\"probe\\" from-mode=\\"bypass\\">\\nhello from the format check\\n'
+    '</cross-session-message>"},"priority":"next","from":"uds:/run/x.sock"}')
+
+
+def test_the_line_has_the_shape_claude_code_2_1_296_writes():
+    real = json.loads(CAPTURED_2_1_296)
+    ours = json.loads(inbox.line("hello from the format check"))
+    assert set(ours) == set(real) and set(ours["message"]) == set(real["message"])
+    assert {k: ours[k] for k in ("msgV", "type", "priority")} == \
+        {k: real[k] for k in ("msgV", "type", "priority")}
+
+    def body(content: str) -> str:
+        return content.split(">\n", 1)[1]
+
+    assert body(ours["message"]["content"]) == body(real["message"]["content"])
+    assert real["message"]["content"].startswith("<cross-session-message from=")
+
+
+@pytest.mark.parametrize("protocol", [2, None, "1"])
+def test_a_session_on_an_unchecked_protocol_gets_nothing_and_the_notes_stay(
+        box, make_doc, protocol):
+    register_session("s-1", box.path, protocol=protocol, version="9.9.9")
+    doc = registry.register(make_doc("<p>x</p>"), session="s-1")["id"]
+    registry.replace_annotations(doc, [{"id": "n1", "selector": "body", "quote": "",
+                                        "note": "n"}])
+    opener = RecordingOpener()
+    send = sender.Sender(Config(), opener=opener)
+    for _ in range(2):                                   # the next click too
+        with pytest.raises(sender.SendError, match=r"9\.9\.9.*annotate.* wait "):
+            send.dispatch(doc)
+    assert box.lines == [] and opener.calls == []        # no post, never a tab
+    assert len(registry.pending(registry.list_annotations(doc))) == 1
+    assert "not one whose inbox format docpin checked" in registry.get(doc)["last_error"]
+
+
+def test_resend_puts_the_last_batch_back_and_posts_it_again(box, make_doc):
+    register_session("s-1", box.path)
+    doc = registry.register(make_doc("<p>x</p>"), session="s-1")["id"]
+    send = sender.Sender(Config(), opener=RecordingOpener())
+    with pytest.raises(sender.NothingToSend, match="nothing was sent"):
+        send.resend(doc)
+    registry.replace_annotations(doc, [{"id": "n1", "selector": "body", "quote": "",
+                                        "note": "first batch"}])
+    send.dispatch(doc)
+    items = registry.list_annotations(doc)
+    registry.replace_annotations(doc, items + [{"id": "n2", "selector": "body",
+                                                "quote": "", "note": "added later"}])
+    send.dispatch(doc)                                   # batch 2: n2 alone
+    for _ in range(100):
+        if len(box.lines) == 2:
+            break
+        threading.Event().wait(0.02)
+    result = send.resend(doc)
+    assert result["target"] == "inbox" and result["count"] == 1   # the LAST batch only
+    for _ in range(100):
+        if len(box.lines) == 3:
+            break
+        threading.Event().wait(0.02)
+    third = box.lines[2]["message"]["content"]
+    assert "added later" in third and "first batch" not in third
+    assert registry.pending(registry.list_annotations(doc)) == []
+
+
 def test_only_a_live_process_of_that_session_counts(box, tmp_path):
     register_session("s-1", box.path, name="live")
     register_session("s-1", box.path, pid=2 ** 22 + 7, name="dead")          # no such pid
@@ -132,7 +200,7 @@ def test_a_refusing_inbox_keeps_the_notes_and_opens_no_tab(tmp_path, make_doc):
     registry.replace_annotations(doc, [{"id": "n1", "selector": "body", "quote": "",
                                         "note": "n"}])
     opener = RecordingOpener()
-    with pytest.raises(sender.SendError, match="inbox refused"):
+    with pytest.raises(sender.SendError, match="did not take"):
         sender.Sender(Config(), opener=opener).dispatch(doc)
     assert opener.calls == []
     assert len(registry.pending(registry.list_annotations(doc))) == 1
@@ -170,8 +238,8 @@ def test_new_session_never_posts_into_the_open_one(box, make_doc):
 def test_an_inbox_that_takes_the_line_and_ignores_it_counts_as_delivered(tmp_path, make_doc):
     # The limit inbox.py states, pinned: a socket that reads the line and
     # understands none of it looks, from the daemon, exactly like a session
-    # that got the notes. Whoever closes the gap (version check, Resend)
-    # changes this test on purpose.
+    # that got the notes. The protocol check narrows it to formats Claude
+    # Code was seen to read; "Resend" (test above) is how the user recovers.
     path = tmp_path / "drop.sock"
     srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     srv.bind(str(path))
