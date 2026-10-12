@@ -103,7 +103,7 @@ uv sync                                  # environnement (aucune dépendance d'e
 uv run pytest -q                         # suite par défaut
 ANNOTATE_PLAYWRIGHT_DIR=<dossier dont node_modules contient playwright> \
   uv run pytest -m browser -v            # l'overlay dans un vrai Chromium headless
-uv run ruff check src tests tools hooks  # doit passer intégralement
+uv run ruff check src tests tools hooks bin/annotate plugins  # doit passer intégralement
 uv run mypy                              # doit passer intégralement
 uv run python tools/mutate.py            # campagne de mutation dirigée, sur une COPIE
 

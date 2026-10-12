@@ -316,6 +316,18 @@ MUTATIONS = (
              '            if item.get("sent_at") == stamp:\n',
              '            if item.get("sent_at"):\n',
              "Resend puts back the last batch only"),
+    Mutation("docpin-not-asked", "plugins/visual-first/hooks/check-document.py",
+             "    answer = _docpin_says(path)\n",
+             "    answer = None\n",
+             "what is a document is docpin's answer when it is installed"),
+    Mutation("prose-limit-off-by-one", "plugins/visual-first/hooks/check-document.py",
+             "    if paragraphs > PROSE_PER_VISUAL * figures:\n",
+             "    if paragraphs >= PROSE_PER_VISUAL * figures:\n",
+             "four paragraphs per visual are fine, five warn"),
+    Mutation("markdown-let-through", "plugins/visual-first/hooks/check-document.py",
+             '    if path.suffix.lower() != ".html":\n        return "block"',
+             '    if False:\n        return "block"',
+             "a Markdown deliverable is blocked"),
 )
 
 

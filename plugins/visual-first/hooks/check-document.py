@@ -1,0 +1,173 @@
+#!/usr/bin/env python3
+"""PostToolUse hook: send the session back to a document it just wrote, when
+the document is not what the visual-first style asks for.
+
+The file is already on disk when this runs: a block does not prevent it, it
+makes the session rework it BEFORE moving on, which prose instructions alone
+did not obtain (the author's own sessions, 2026-09).
+
+| The document                                   | Verdict |
+|------------------------------------------------|---------|
+| a Markdown deliverable                          | block: a document is a self-contained HTML page |
+| an HTML page without any visual (svg, img, canvas, table, mermaid) | block |
+| more than PROSE_PER_VISUAL paragraphs per visual | warning |
+| a local image over 1 MB that git does not track yet | warning |
+| `<!-- visual: exemption - reason -->` in its first five lines | nothing |
+
+**What is a document is decided by docpin when it is installed**
+(`annotate is-document <path>`: the folders the user tracks there, one rule
+in one place); without it, by a `docs/` folder between the project and the
+file. READMEs, `CLAUDE.md`, skills, dependencies and working notes (`plans/`,
+`drafts/`) are never covered.
+
+It never exits other than 0 or 2: a failure of this hook must not break a
+session. `~/.claude/visual-first-off` turns it off for the machine.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+TOOLS = {"Write", "Edit", "MultiEdit"}
+SUFFIXES = {".md", ".html"}
+EXCLUDED_NAMES = {"README.md", "CHANGELOG.md", "CONTRIBUTING.md", "CLAUDE.md", "AGENTS.md",
+                  "LICENSE.md", "SKILL.md"}
+EXCLUDED_FOLDERS = {"node_modules", ".venv", "venv", "site-packages", ".git", "__pycache__",
+                    "plans", "drafts", "figures"}
+PROSE_PER_VISUAL = 4
+IMAGE_MAX_BYTES = 1_000_000
+
+# English, and the French marker of the style this one comes from.
+_EXEMPTION = re.compile(r"^\s*<!--\s*(?:visual\s*:\s*exemption|visuel\s*:\s*d[ée]rogation)"
+                        r"\s*[—–-]\s*(.+?)\s*-->\s*$", re.I)
+_FIGURE = re.compile(r"<(?:svg|img|canvas|table)\b|class\s*=\s*[\"'][^\"']*\bmermaid\b", re.I)
+_PARAGRAPH = re.compile(r"<p\b", re.I)
+_LOCAL_IMAGE = re.compile(r"<img\b[^>]*?\bsrc\s*=\s*[\"']([^\"'#?:]+)[\"']", re.I)
+
+FIX = "write it as a self-contained HTML page and draw what can be drawn (SVG, diagram, table)"
+EXEMPT = ("If the form is justified (a transcript, raw data, the source of a figure), put "
+          "<!-- visual: exemption - reason --> in its first five lines")
+
+
+class CheckError(Exception):
+    """The document cannot be checked (never surfaces: the hook then says nothing)."""
+
+
+def exemption(text: str) -> str | None:
+    for line in text.splitlines()[:5]:
+        found = _EXEMPTION.match(line)
+        if found:
+            return found.group(1)
+    return None
+
+
+def _docpin_says(path: Path) -> bool | None:
+    command = os.environ.get("VISUAL_FIRST_ANNOTATE") or shutil.which("annotate")
+    if not command:
+        return None
+    try:
+        done = subprocess.run([command, "is-document", str(path)], capture_output=True,
+                              text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return {0: True, 1: False}.get(done.returncode)
+
+
+def covered(path: Path, project: Path) -> bool:
+    if path.suffix.lower() not in SUFFIXES or path.name in EXCLUDED_NAMES:
+        return False
+    if EXCLUDED_FOLDERS.intersection(path.parts):
+        return False
+    answer = _docpin_says(path)
+    if answer is not None:
+        return answer
+    try:
+        inside = path.resolve().relative_to(project.resolve()).parts[:-1]
+    except ValueError:
+        return False
+    return "docs" in inside
+
+
+def _tracked_by_git(path: Path) -> bool:
+    try:
+        return subprocess.run(["git", "-C", str(path.parent), "ls-files", "--error-unmatch",
+                               "--", path.name], capture_output=True, timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def heavy_images(text: str, folder: Path) -> list[tuple[str, int]]:
+    """Local images over IMAGE_MAX_BYTES that git does not track yet: a new
+    one is said when the document references it, a committed one is left."""
+    found = []
+    for src in dict.fromkeys(_LOCAL_IMAGE.findall(text)):
+        image = folder / src
+        try:
+            size = image.stat().st_size
+        except OSError:
+            continue
+        if size > IMAGE_MAX_BYTES and not _tracked_by_git(image):
+            found.append((src, size))
+    return found
+
+
+def verdict(path: Path, text: str) -> tuple[str, str]:
+    """("ok" | "warning" | "block" | "exempt", reason) for a covered document."""
+    reason = exemption(text)
+    if reason:
+        return "exempt", reason
+    if path.suffix.lower() != ".html":
+        return "block", ("a Markdown deliverable: a document is a self-contained HTML page, "
+                         "with as many visuals as it has ideas to show")
+    figures = len(_FIGURE.findall(text))
+    if figures == 0:
+        return "block", ("no visual in this HTML page: a document is drawn (svg, img, table, "
+                         "canvas, mermaid) before it is written")
+    reasons = []
+    paragraphs = len(_PARAGRAPH.findall(text))
+    if paragraphs > PROSE_PER_VISUAL * figures:
+        reasons.append(f"{paragraphs} paragraphs for {figures} visual(s), more than "
+                       f"{PROSE_PER_VISUAL} per visual: draw the rest")
+    for src, size in heavy_images(text, path.parent):
+        reasons.append(f"{src} weighs {size / 1e6:.1f} MB, over {IMAGE_MAX_BYTES / 1e6:.0f} MB: "
+                       f"render it smaller (no grain, scale 1)")
+    return ("warning", "; ".join(reasons)) if reasons else ("ok", "")
+
+
+def main() -> int:
+    try:
+        payload = json.load(sys.stdin)
+        if not isinstance(payload, dict) or payload.get("tool_name") not in TOOLS:
+            return 0
+        if (Path.home() / ".claude" / "visual-first-off").exists():
+            return 0
+        raw = (payload.get("tool_input") or {}).get("file_path")
+        if not isinstance(raw, str) or not raw:
+            return 0
+        cwd = payload.get("cwd") if isinstance(payload.get("cwd"), str) else ""
+        project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or cwd or ".")
+        path = Path(raw) if Path(raw).is_absolute() else project / raw
+        if not covered(path, project):
+            return 0
+        status, reason = verdict(path, path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:  # noqa: BLE001 - a broken check must never break the session
+        return 0
+    if status == "block":
+        print(f"{path.name}: {reason}.\nRework it now, before anything else: {FIX}.\n"
+              f"{EXEMPT}.", file=sys.stderr)
+        return 2
+    if status == "warning":
+        print(json.dumps({"hookSpecificOutput": {
+            "hookEventName": "PostToolUse",
+            "additionalContext": f"{path.name}: {reason}. Rework it before moving on: {FIX}.",
+        }}))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

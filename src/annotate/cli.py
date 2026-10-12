@@ -3,6 +3,7 @@
     annotate register <path> [--session ID] [--cwd DIR] [--hook]
     annotate wait <id>
     annotate list
+    annotate is-document <path>
     annotate open [<id>]
     annotate send <id>
     annotate new-session <id>
@@ -108,6 +109,16 @@ def cmd_wait(args: argparse.Namespace, cfg: config.Config) -> int:
         if isinstance(text, str) and text:
             print(text)
             return 0
+
+
+def cmd_is_document(args: argparse.Namespace, cfg: config.Config) -> int:
+    """Exit 0 if `path` is in a folder docpin tracks, as an HTML document would
+    be, else 1: the visual-first check asks this (one rule, in folders.py),
+    for a Markdown file too, since it is the HTML the user should have got."""
+    path = Path(args.path)
+    found = folders.wanted(path.with_suffix(".html"))
+    print("document" if found else "not a document")
+    return 0 if found else 1
 
 
 def cmd_list(args: argparse.Namespace, cfg: config.Config) -> int:
@@ -294,6 +305,10 @@ def parser() -> argparse.ArgumentParser:
     p.set_defaults(run=cmd_wait)
 
     sub.add_parser("list", help="one line per document").set_defaults(run=cmd_list)
+
+    p = sub.add_parser("is-document", help="exit 0 if this path is in a tracked folder")
+    p.add_argument("path")
+    p.set_defaults(run=cmd_is_document)
 
     p = sub.add_parser("open", help="open a document in the browser, or the home page")
     p.add_argument("id", nargs="?", default=None)
