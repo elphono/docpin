@@ -5,3 +5,5 @@ __pycache__/
 .ruff_cache/
 *.pyc
 .claude/worktrees/
+evals/*/results/
+evals/results/
