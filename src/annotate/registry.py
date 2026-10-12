@@ -449,7 +449,11 @@ def mark_sent(doc_id: str, ids: list[str], stamp: str) -> None:
 
 
 def unmark_sent(doc_id: str, stamp: str) -> int:
-    """Undo a failed send: the batch stamped `stamp` becomes sendable again."""
+    """Undo a send: the batch stamped `stamp` becomes sendable again.
+
+    No caller since 2026-10-05: a send now marks the notes only once a session
+    is in hand, so a failed send has nothing to undo. Kept for the planned
+    Resend of a batch an inbox took and ignored (see inbox.py)."""
     with locked():
         items = _read_annotations(doc_id)
         count = 0

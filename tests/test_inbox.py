@@ -165,3 +165,35 @@ def test_new_session_never_posts_into_the_open_one(box, make_doc):
     opener = RecordingOpener()
     assert sender.Sender(Config(), opener=opener).dispatch(doc, fresh=True)["target"] == "terminal"
     assert box.lines == [] and len(opener.calls) == 1
+
+
+def test_an_inbox_that_takes_the_line_and_ignores_it_counts_as_delivered(tmp_path, make_doc):
+    # The limit inbox.py states, pinned: a socket that reads the line and
+    # understands none of it looks, from the daemon, exactly like a session
+    # that got the notes. Whoever closes the gap (version check, Resend)
+    # changes this test on purpose.
+    path = tmp_path / "drop.sock"
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(str(path))
+    srv.listen(1)
+    got = threading.Event()
+
+    def drop() -> None:
+        conn, _ = srv.accept()
+        with conn:
+            while conn.recv(65536):
+                got.set()
+
+    threading.Thread(target=drop, daemon=True).start()
+    try:
+        register_session("s-1", path)
+        doc = registry.register(make_doc("<p>x</p>"), session="s-1")["id"]
+        registry.replace_annotations(doc, [{"id": "n1", "selector": "body", "quote": "",
+                                            "note": "n"}])
+        result = sender.Sender(Config(), opener=RecordingOpener()).dispatch(doc)
+        assert got.wait(3), "the line reached the socket"
+        entry = registry.get(doc)
+        assert result["target"] == "inbox" and entry["status"] == "delivered"
+        assert registry.pending(registry.list_annotations(doc)) == [] and not entry["last_error"]
+    finally:
+        srv.close()

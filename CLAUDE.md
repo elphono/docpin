@@ -198,7 +198,11 @@ copie du dépôt et exige que la suite tombe.
   `SendMessage`, figé par `tests/test_inbox.py`. Le démon ne revendique **aucun** `from-mode` :
   une session en `bypassPermissions` retient donc le message derrière un dialogue d'approbation,
   décision de l'utilisateur (« dialogue à chaque envoi »). Si la boîte refuse, les notes restent
-  à envoyer, sans onglet.
+  à envoyer, sans onglet. **Si elle accepte la ligne et que Claude Code l'ignore** (format changé
+  par une mise à jour), le démon ne peut pas le voir : les notes comptent comme livrées et
+  n'arrivent nulle part (reproduit le 2026-10-12, figé par
+  `test_an_inbox_that_takes_the_line_and_ignores_it_counts_as_delivered`). La parade est prévue,
+  pas codée : ne poster que pour les versions vérifiées, et un « Renvoyer » (`unmark_sent`).
 - **`wt.exe` coupe sa ligne de commande au `;`** (mesuré le 2026-10-05 : un `bash -c 'a; b'`
   n'a exécuté que la première moitié). L'onglet lance donc un script écrit sous le dossier de
   données, et le prompt passe par un fichier, jamais par la ligne de commande.

@@ -19,7 +19,14 @@ inbox socket"). A message wakes an idle session, which starts a turn with it.
 - **The line format is NOT documented**, only the auth line is. It was
   captured on 2026-10-06 (Claude Code 2.1.289) from a real `SendMessage` into
   a probe socket, and `tests/test_inbox.py` fixes it. If an update changes it,
-  the post fails or is ignored; the notes then stay pending, never a tab.
+  two things can happen, and only the first one shows: the socket REFUSES
+  the post (the notes stay pending, never a tab), or it ACCEPTS the bytes and
+  Claude Code ignores them. The second is invisible from here: a socket that
+  took the line is all the daemon can know, so the notes count as delivered
+  and nothing reaches the session (reproduced 2026-10-12 with a socket that
+  reads and drops; `test_an_inbox_that_takes_the_line_and_ignores_it_counts_as_delivered`).
+  What closes it is planned, not built: post only for the Claude Code versions
+  whose format was checked, and a Resend for a batch that never arrived.
 - **No `from-mode`**: that attribute is how a sender claims its permission
   class. The daemon claims none, so a session that bypasses permission
   prompts HOLDS the message behind an Approve / Deny dialog. That is the
