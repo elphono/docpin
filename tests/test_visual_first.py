@@ -103,9 +103,25 @@ def test_markdown_is_blocked_and_html_without_a_visual_too():
 
 
 @pytest.mark.parametrize("visual", [SVG, '<img src="x.png" alt="">', "<table><tr><td>1</td></tr></table>",
-                                    '<canvas id="c"></canvas>', '<pre class="mermaid">flowchart TD</pre>'])
+                                    '<canvas id="c"></canvas>'])
 def test_each_kind_of_visual_counts(visual):
     assert check.verdict(Path("a.html"), page(visual + "<p>one</p>"))[0] == "ok"
+
+
+def test_a_mermaid_block_is_not_a_visual_in_a_self_contained_page():
+    status, reason = check.verdict(Path("a.html"),
+                                   page('<pre class="mermaid">flowchart TD\n a-->b</pre>'))
+    assert status == "block" and "inline SVG" in reason
+
+
+def test_a_page_that_loads_from_the_network_is_not_self_contained():
+    remote = ('<script src="https://cdn.example.org/lib.js"></script>'
+              '<link rel="stylesheet" href="//fonts.example.org/x.css">')
+    status, reason = check.verdict(Path("a.html"), page(SVG + remote))
+    assert status == "warning" and "cdn.example.org/lib.js" in reason
+    assert "//fonts.example.org/x.css" in reason
+    local = '<img src="figures/a.png" alt=""><link rel="stylesheet" href="style.css">'
+    assert check.verdict(Path("a.html"), page(SVG + local))[0] == "ok"   # the witness
 
 
 def test_more_than_four_paragraphs_per_visual_warns():

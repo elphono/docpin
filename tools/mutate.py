@@ -332,6 +332,10 @@ MUTATIONS = (
              '    if (copy / "annotate" / "cli.py").is_file():\n',
              '    if False:\n',
              "the check finds docpin through its stable copy (no bin/ on a hook's PATH)"),
+    Mutation("external-ignored", "plugins/visual-first/hooks/check-document.py",
+             "    if external:\n",
+             "    if False:\n",
+             "a page that loads from the network is not self-contained"),
 )
 
 

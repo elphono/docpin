@@ -12,6 +12,8 @@ did not obtain (the author's own sessions, 2026-09).
 | an HTML page without any visual (svg, img, canvas, table, mermaid) | block |
 | more than PROSE_PER_VISUAL paragraphs per visual | warning |
 | a local image over 1 MB that git does not track yet | warning |
+| a script, stylesheet or image loaded from the network | warning: not self-contained |
+| a `class="mermaid"` block | not a visual: it draws nothing without its library, which a self-contained page does not load; inline SVG instead |
 | `<!-- visual: exemption - reason -->` in its first five lines | nothing |
 
 **What is a document is decided by docpin when it is installed**
@@ -46,7 +48,10 @@ IMAGE_MAX_BYTES = 1_000_000
 # English, and the French marker of the style this one comes from.
 _EXEMPTION = re.compile(r"^\s*<!--\s*(?:visual\s*:\s*exemption|visuel\s*:\s*d[ée]rogation)"
                         r"\s*[—–-]\s*(.+?)\s*-->\s*$", re.I)
-_FIGURE = re.compile(r"<(?:svg|img|canvas|table)\b|class\s*=\s*[\"'][^\"']*\bmermaid\b", re.I)
+_FIGURE = re.compile(r"<(?:svg|img|canvas|table)\b", re.I)
+_MERMAID = re.compile(r"class\s*=\s*[\"'][^\"']*\bmermaid\b", re.I)
+_EXTERNAL = re.compile(r"<(?:script|img|link|iframe)\b[^>]*?\b(?:src|href)\s*=\s*[\"']"
+                       r"((?:https?:)?//[^\"']+)", re.I)
 _PARAGRAPH = re.compile(r"<p\b", re.I)
 _LOCAL_IMAGE = re.compile(r"<img\b[^>]*?\bsrc\s*=\s*[\"']([^\"'#?:]+)[\"']", re.I)
 
@@ -148,9 +153,15 @@ def verdict(path: Path, text: str) -> tuple[str, str]:
                          "with as many visuals as it has ideas to show")
     figures = len(_FIGURE.findall(text))
     if figures == 0:
+        mermaid = (" (a mermaid block draws nothing without its library: draw it as inline "
+                   "SVG)") if _MERMAID.search(text) else ""
         return "block", ("no visual in this HTML page: a document is drawn (svg, img, table, "
-                         "canvas, mermaid) before it is written")
+                         f"canvas) before it is written{mermaid}")
     reasons = []
+    external = list(dict.fromkeys(_EXTERNAL.findall(text)))
+    if external:
+        shown = ", ".join(external[:3]) + (" ..." if len(external) > 3 else "")
+        reasons.append(f"not self-contained, it loads from the network: {shown}")
     paragraphs = len(_PARAGRAPH.findall(text))
     if paragraphs > PROSE_PER_VISUAL * figures:
         reasons.append(f"{paragraphs} paragraphs for {figures} visual(s), more than "

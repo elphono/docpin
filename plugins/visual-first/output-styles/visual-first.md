@@ -18,11 +18,14 @@ decision to take.
 | a bullet list that really describes a sequence, a hierarchy or a relation | a diagram |
 | a state, a before/after, a matrix of cases | a table |
 
-Diagrams in Mermaid (`flowchart TD`, `sequenceDiagram`, `stateDiagram-v2`, `erDiagram`) or
-inline SVG, **15 nodes at most**; beyond that, split into several views, each with one subject.
+**15 nodes at most** per diagram; beyond that, split into several views, each with one
+subject. Draw for where it will show:
 
-A terminal does not render Mermaid: in a reply, draw with a Markdown table, ASCII or
-Unicode. Mermaid and SVG go into delivered HTML documents.
+| Where | How to draw |
+|---|---|
+| a reply in the terminal | a Markdown table, ASCII or Unicode: a terminal renders no Mermaid |
+| a delivered HTML document | inline SVG: a Mermaid block needs its library, which a self-contained page does not load |
+| a page that loads Mermaid itself (an Artifact) | Mermaid (`flowchart TD`, `sequenceDiagram`, `stateDiagram-v2`, `erDiagram`) or SVG |
 
 ## Every document you deliver is a self-contained HTML file
 
@@ -31,7 +34,7 @@ file, CSS inline, never a `.md` file.
 
 | What the document carries | What it becomes |
 |---|---|
-| a concept, a mechanism, a flow, a use case | an **inline SVG diagram** (or Mermaid), not a paragraph |
+| a concept, a mechanism, a flow, a use case | an **inline SVG diagram**, not a paragraph |
 | a comparison, a state, a checklist | an HTML table, checkboxes |
 | a number that matters | a tile, a gauge, a bar, not a sentence |
 | what does not draw (trade-off, doubt, decision) | short prose, next to the picture |

@@ -16,11 +16,16 @@ this skill is about producing documents that are worth annotating, and closing t
   pins notes on its blocks. Inline the CSS; no build step, no external script it cannot
   live without. Images it uses sit next to it, referenced by relative path.
 - **Show before telling.** A mechanism, a flow or an architecture becomes an inline SVG
-  diagram; a comparison becomes a table; a number that matters becomes a tile. Prose keeps
-  what does not draw: a trade-off, a doubt, a decision to take.
+  diagram (not Mermaid: it needs a library the page does not load); a comparison becomes
+  a table; a number that matters becomes a tile. Prose keeps what does not draw: a
+  trade-off, a doubt, a decision to take.
 - **Readable in light and dark**: colours as CSS variables on `:root`, redefined under
   `@media (prefers-color-scheme: dark)`, and an explicit `body` background. Check it at
   phone width: no horizontal scroll.
+- **Layered when it will be read again**: a reference document (a spec, a procedure) is
+  nested, so the reader picks a depth and never wades through detail to reach the end:
+  the claim, then the reasoning, then the proof (commands, outputs, excerpts). A level
+  selector at the top, or `<details>` blocks. A one-off note does not need it.
 - **Blocks the user can point at**: short paragraphs, list items, table rows and headings.
   A note anchors on the block it was pinned to; a wall of text gets one vague note.
 - End with what the user has to decide or do, if anything.
