@@ -505,3 +505,35 @@ def test_a_daemon_says_when_its_code_changed_on_disk_since_it_started(daemon, tm
     (code / "registry.py").write_text("x = 1\n")
     (code / "new_module.py").write_text("")                            # a module added
     assert daemon.request("GET", "/api/docs")[1]["stale"] is True
+
+
+def test_the_baseline_route_gives_both_versions_and_nothing_before_a_send(daemon, make_doc):
+    path = make_doc("<p>as sent</p>")
+    doc_id = registry.register(path, session="sess-1")["id"]
+    status, body = daemon.request("GET", f"/api/docs/{doc_id}/baseline")
+    assert status == 404 and "nothing was sent" in body["error"]
+    sent = path.read_text()
+    registry.take_baseline(doc_id, "T1")
+    path.write_text(sent.replace("as sent", "corrected"))
+    status, body = daemon.request("GET", f"/api/docs/{doc_id}/baseline")
+    assert status == 200
+    assert (body["reference"], body["at"]) == (sent, "T1")
+    assert "corrected" in body["current"] and "annotate.js" not in body["current"]
+    path.unlink()
+    assert daemon.request("GET", f"/api/docs/{doc_id}/baseline")[0] == 410
+
+
+def test_mark_as_read_needs_the_client_header_and_moves_the_reference(daemon, make_doc):
+    path = make_doc("<p>first</p>")
+    doc_id = registry.register(path)["id"]
+    registry.take_baseline(doc_id, "T1")
+    path.write_text(path.read_text().replace("first", "second"))
+    conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=5)
+    conn.request("POST", f"/api/docs/{doc_id}/baseline",
+                 headers={"Host": f"localhost:{daemon.port}"})
+    assert conn.getresponse().status == 403          # header missing
+    conn.close()
+    assert "first" in (registry.read_baseline(doc_id) or "")
+    status, body = daemon.request("POST", f"/api/docs/{doc_id}/baseline")
+    assert status == 200 and body["at"] and registry.get(doc_id)["baseline_at"] == body["at"]
+    assert "second" in (registry.read_baseline(doc_id) or "")

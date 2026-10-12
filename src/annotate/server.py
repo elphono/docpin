@@ -15,6 +15,9 @@
     POST   /api/docs/<id>/send               hand unsent notes to a session
     POST   /api/docs/<id>/new-session        same, in a NEW session (terminal tab)
     POST   /api/docs/<id>/wait               held until notes come (`annotate wait`)
+    GET    /api/docs/<id>/baseline           the reference (the file at the last send)
+                                             and the file now, raw: the page compares them
+    POST   /api/docs/<id>/baseline           "Mark as read": the file now becomes the reference
     POST   /api/docs/<id>/open               open the document in the browser
     POST   /api/docs/<id>/session {session, cwd}  attach it to a conversation of this
                                              machine ("" detaches; 400 if not resumable)
@@ -317,14 +320,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(HTTPStatus.OK, {"removed": entry})
         raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET, POST or DELETE")
 
-    def _document(self, entry: dict[str, Any], path: Path) -> None:
+    def _read_document(self, path: Path) -> str:
         try:
-            text = path.read_text(encoding="utf-8", errors="replace")
+            return path.read_text(encoding="utf-8", errors="replace")
         except FileNotFoundError as exc:
             raise Refused(HTTPStatus.GONE, f"{path} no longer exists") from exc
         except OSError as exc:
             raise Refused(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc)) from exc
-        page = htmldoc.inject_overlay(text, entry["id"])
+
+    def _document(self, entry: dict[str, Any], path: Path) -> None:
+        page = htmldoc.inject_overlay(self._read_document(path), entry["id"])
         self._send(HTTPStatus.OK, page.encode("utf-8"), "text/html; charset=utf-8")
 
     def _with_live(self, item: dict[str, Any]) -> dict[str, Any]:
@@ -398,12 +403,32 @@ class Handler(BaseHTTPRequestHandler):
             return self._wait(doc_id)
         if method == "POST" and action == "session":
             return self._attach(doc_id)
+        if action == "baseline":
+            return self._baseline(method, doc_id)
         if method == "POST" and action == "open":
             registry.get(doc_id)
             url = f"{self.server.base_url()}/docs/{doc_id}"
             return self._json(HTTPStatus.OK, {"url": url,
                                               "opener": browser.open_url(url)})
         raise Refused(HTTPStatus.NOT_FOUND, "not found")
+
+    def _baseline(self, method: str, doc_id: str) -> None:
+        entry = registry.get(doc_id)
+        if method == "GET":
+            reference = registry.read_baseline(doc_id)
+            if reference is None or not entry.get("baseline_at"):
+                raise Refused(HTTPStatus.NOT_FOUND, "no reference: nothing was sent yet")
+            current = self._read_document(Path(entry["path"]))
+            return self._json(HTTPStatus.OK, {"reference": reference, "current": current,
+                                              "at": entry["baseline_at"]})
+        if method == "POST":
+            stamp = registry.now_iso()
+            missing = registry.take_baseline(doc_id, stamp)
+            if missing:
+                raise registry.RegistryError(missing)
+            log.info("%s marked as read from the page", doc_id)
+            return self._json(HTTPStatus.OK, {"at": stamp})
+        raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET or POST")
 
     def _attach(self, doc_id: str) -> None:
         body = self._body()
