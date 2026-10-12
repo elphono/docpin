@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Avec ou sans infographies</title>
+<style>
+:root {
+  --bg: #fbfaf7; --paper: #ffffff; --ink: #1d232b; --muted: #5d6673; --line: #e3e0d8;
+  --claude: #2563eb; --claude-soft: #dbe7ff;
+  --docpin: #c2410c; --docpin-soft: #ffe6d5;
+  --plat: #7c3aed; --plat-soft: #ece3ff;
+  --good: #15803d; --warn: #a16207; --bad: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #15181d; --paper: #1d2128; --ink: #e6e8eb; --muted: #9aa3ae; --line: #313844;
+    --claude: #7aa7ff; --claude-soft: #1f2e4d; --docpin: #fb923c; --docpin-soft: #4a2a15;
+    --plat: #b79bff; --plat-soft: #2d2350; --good: #4ade80; --warn: #fbbf24; --bad: #f87171;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #15181d; --paper: #1d2128; --ink: #e6e8eb; --muted: #9aa3ae; --line: #313844;
+  --claude: #7aa7ff; --claude-soft: #1f2e4d; --docpin: #fb923c; --docpin-soft: #4a2a15;
+  --plat: #b79bff; --plat-soft: #2d2350; --good: #4ade80; --warn: #fbbf24; --bad: #f87171;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 980px; margin: 0 auto; padding: 24px 16px 80px; }
+h1 { font-size: 30px; line-height: 1.2; margin: 8px 0 6px; }
+h2 { font-size: 22px; margin: 44px 0 10px; padding-top: 10px; border-top: 2px solid var(--line); }
+h3 { font-size: 17px; margin: 22px 0 8px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.lede { color: var(--muted); font-size: 17px; margin: 0 0 14px; }
+code { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: .92em; }
+.tag { display: inline-block; font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  padding: 3px 10px; border-radius: 999px; color: #fff; }
+.tag.sans { background: var(--claude); } .tag.avec { background: var(--docpin); }
+:root[data-theme="dark"] .tag, .tag { color: var(--bg); }
+.sub { color: var(--muted); font-size: 14px; font-weight: 400; }
+figure { margin: 10px 0 18px; background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
+figure img { display: block; width: 100%; height: auto; border-radius: 4px; }
+figcaption { color: var(--muted); font-size: 14px; margin-top: 8px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
+.tile { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.tile .k { font-size: 13px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+.tile .pair { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; margin-top: 8px; font-size: 15px; }
+.tile .pair .bar { height: 10px; border-radius: 3px; }
+.bar.sans { background: var(--claude); } .bar.avec { background: var(--docpin); }
+.tile .v { font-weight: 700; font-size: 15px; }
+.verdict { background: var(--paper); border: 1px solid var(--line); border-left: 5px solid var(--good);
+  border-radius: 10px; padding: 12px 16px; margin: 14px 0; }
+.table-wrap { overflow-x: auto; margin: 12px 0; }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 15px; background: var(--paper); }
+th, td { text-align: left; vertical-align: top; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+th { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+td.win { box-shadow: inset 4px 0 0 var(--good); }
+td.lose { box-shadow: inset 4px 0 0 var(--bad); }
+td.tie { box-shadow: inset 4px 0 0 var(--line); }
+.legend { font-size: 14px; color: var(--muted); display: flex; gap: 16px; flex-wrap: wrap; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 6px; }
+details { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; margin: 12px 0; }
+summary { cursor: pointer; font-weight: 600; }
+pre { overflow-x: auto; font-size: 13px; background: var(--bg); padding: 10px; border-radius: 6px; }
+.todo { border: 2px solid var(--ink); border-radius: 10px; padding: 12px 16px; margin-top: 28px; }
+.todo ol { margin: 6px 0 0; padding-left: 22px; }
+svg.fig { display: block; width: 100%; height: auto; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+svg.fig .f-ink { fill: var(--ink); }
+svg.fig .n-claude { fill: var(--claude-soft); stroke: var(--claude); stroke-width: 2.5; }
+svg.fig .n-docpin { fill: var(--docpin-soft); stroke: var(--docpin); stroke-width: 2.5; }
+svg.fig .n-docpin-soft { fill: var(--paper); stroke: var(--docpin); stroke-width: 2; stroke-dasharray: 6 4; }
+svg.fig .n-plat { fill: var(--plat-soft); stroke: var(--plat); stroke-width: 2.5; }
+svg.fig .n-plain { fill: var(--paper); stroke: var(--line); stroke-width: 2; }
+svg.fig .a-claude, svg.fig .a-docpin, svg.fig .a-plat { fill: none; stroke-width: 3; }
+svg.fig .a-claude { stroke: var(--claude); } svg.fig .a-docpin { stroke: var(--docpin); } svg.fig .a-plat { stroke: var(--plat); }
+svg.fig .d-dash { stroke-dasharray: 9 6; } svg.fig .d-dot { stroke-dasharray: 2 6; stroke-linecap: round; }
+svg.fig .t-h { fill: var(--ink); font-size: 21px; font-weight: 700; }
+svg.fig .t-s { fill: var(--muted); font-size: 17px; }
+svg.fig .t-m { fill: var(--ink); font-size: 17px; font-family: ui-monospace, "Cascadia Code", Menlo, monospace; }
+svg.fig .t-b { fill: var(--ink); font-size: 16px; font-weight: 700; }
+svg.fig .f-claude { fill: var(--claude); } svg.fig .f-docpin { fill: var(--docpin); } svg.fig .f-plat { fill: var(--plat); }
+svg.fig .t-hero { fill: var(--docpin); font-size: 128px; font-weight: 800; letter-spacing: -4px; }
+svg.fig .t-num { fill: var(--ink); font-size: 46px; font-weight: 800; }
+svg.fig .t-mono { font-family: ui-monospace, "Cascadia Code", Menlo, monospace; font-size: 40px; }
+.pan-hint { display: none; }
+@media (max-width: 640px) {
+  figure .pan { overflow-x: auto; }
+  figure .pan > svg, figure .pan > img { min-width: 760px; }
+  .pan-hint { display: inline; }
+}
+</style>
+</head>
+<body>
+<main>
+<h1>Avec ou sans epic-infographics</h1>
+<p class="lede">Le même sujet — la boucle de docpin — dessiné quatre fois : deux figures produites comme une session le fait par défaut (SVG en ligne), et les deux mêmes produites avec le skill tiers <code>epic-infographics</code> (HTML rendu en PNG). Mesuré le 2026-10-12, pour décider s'il s'installe sur la seconde machine et s'il entre dans le package docpin.</p>
+
+<div class="tiles" aria-label="Résumé">
+  <div class="tile"><div class="k">Temps, deux figures</div>
+    <div class="pair"><span class="tag sans">sans</span><span><span class="bar sans" style="display:block;width:60%"></span></span>
+      <span class="tag avec">avec</span><span><span class="bar avec" style="display:block;width:100%"></span></span></div>
+    <div class="v">2 min 17 s<br>contre 3 min 50 s</div></div>
+  <div class="tile"><div class="k">Poids, deux figures</div>
+    <div class="pair"><span class="tag sans">sans</span><span class="v">≈ 8 Ko</span><span class="tag avec">avec</span><span class="v">≈ 8,5 Mo</span></div>
+    <div class="sub">≈ 1 000 fois plus lourd</div></div>
+  <div class="tile"><div class="k">Mode sombre</div>
+    <div class="pair"><span class="tag sans">sans</span><span class="v">suit le thème</span><span class="tag avec">avec</span><span class="v">reste clair</span></div></div>
+  <div class="tile"><div class="k">Annotable par docpin</div>
+    <div class="pair"><span class="tag sans">sans</span><span class="v">le mot visé</span><span class="tag avec">avec</span><span class="v">un point (x, y)</span></div></div>
+</div>
+
+<div class="verdict"><strong>Recommandation :</strong> garder le SVG en ligne par défaut, et ne pas mettre le skill dans le package docpin. L'installer sur la seconde machine reste utile, pour l'occasionnelle planche riche que <code>infographies.md</code> lui confie déjà.</div>
+
+<h2>1. Le schéma de mécanisme : la boucle</h2>
+
+<h3><span class="tag sans">sans</span> SVG en ligne, couleurs du document <span class="sub">1 min 23 s · 4,2 Ko</span></h3>
+<figure>
+<div class="pan"><svg class="fig" viewBox="0 0 960 560" role="img" aria-labelledby="sa-t sa-d">
+  <title id="sa-t">La boucle de docpin</title>
+  <desc id="sa-d">Une session écrit un document HTML ; le hook l'enregistre auprès du démon ; le démon sert la page au navigateur avec l'overlay ; les notes épinglées reviennent à la session par l'une de trois issues.</desc>
+  <defs>
+    <marker id="sa-mc" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="f-claude"/></marker>
+    <marker id="sa-md" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="f-docpin"/></marker>
+    <marker id="sa-mp" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 L10 5 L0 10 z" class="f-plat"/></marker>
+  </defs>
+
+  <!-- actors -->
+  <g>
+    <rect x="30" y="40" width="250" height="118" rx="14" class="n-claude"/>
+    <text x="155" y="82" text-anchor="middle" class="t-h">Session</text>
+    <text x="155" y="110" text-anchor="middle" class="t-s">Claude Code : Write / Edit</text>
+    <text x="155" y="134" text-anchor="middle" class="t-m">docs/x.html</text>
+  </g>
+  <g>
+    <rect x="355" y="40" width="250" height="118" rx="14" class="n-docpin-soft"/>
+    <text x="480" y="82" text-anchor="middle" class="t-h">Registre</text>
+    <text x="480" y="110" text-anchor="middle" class="t-s">hook PostToolUse</text>
+    <text x="480" y="134" text-anchor="middle" class="t-s">+ parcours toutes les 30 s</text>
+  </g>
+  <g>
+    <rect x="680" y="40" width="250" height="118" rx="14" class="n-docpin"/>
+    <text x="805" y="82" text-anchor="middle" class="t-h">Démon annotate</text>
+    <text x="805" y="110" text-anchor="middle" class="t-m">127.0.0.1:8765</text>
+    <text x="805" y="134" text-anchor="middle" class="t-s">HTML du disque + overlay</text>
+  </g>
+  <g>
+    <rect x="680" y="300" width="250" height="118" rx="14" class="n-plat"/>
+    <text x="805" y="342" text-anchor="middle" class="t-h">Navigateur</text>
+    <text x="805" y="370" text-anchor="middle" class="t-s">Alt+clic : épingle + note</text>
+    <text x="805" y="394" text-anchor="middle" class="t-s">« Send to session »</text>
+  </g>
+
+  <!-- forward flow -->
+  <line x1="284" y1="99" x2="349" y2="99" class="a-claude" marker-end="url(#sa-mc)"/>
+  <line x1="609" y1="99" x2="674" y2="99" class="a-docpin" marker-end="url(#sa-md)"/>
+  <line x1="805" y1="162" x2="805" y2="294" class="a-docpin" marker-end="url(#sa-md)"/>
+  <text x="818" y="234" class="t-s">GET /docs/&lt;id&gt;</text>
+
+  <!-- return: the daemon decides -->
+  <line x1="676" y1="359" x2="566" y2="359" class="a-plat" marker-end="url(#sa-mp)"/>
+  <text x="621" y="345" text-anchor="middle" class="t-s">PUT</text>
+  <rect x="330" y="300" width="230" height="118" rx="14" class="n-plain"/>
+  <text x="445" y="340" text-anchor="middle" class="t-h">Le démon livre</text>
+  <text x="445" y="366" text-anchor="middle" class="t-s">une seule fois,</text>
+  <text x="445" y="390" text-anchor="middle" class="t-s">par la première issue libre</text>
+
+  <!-- the three exits back to the session -->
+  <path d="M330 330 C 250 330, 200 260, 175 168" class="a-claude" marker-end="url(#sa-mc)"/>
+  <path d="M330 372 C 200 372, 120 300, 105 168" class="a-claude d-dash" marker-end="url(#sa-mc)"/>
+  <path d="M400 422 C 380 520, 60 520, 50 168" class="a-claude d-dot" marker-end="url(#sa-mc)"/>
+
+  <g class="t-s">
+    <circle cx="232" cy="284" r="13" class="n-claude"/><text x="232" y="289" text-anchor="middle" class="t-b">1</text>
+    <circle cx="174" cy="320" r="13" class="n-claude"/><text x="174" y="325" text-anchor="middle" class="t-b">2</text>
+    <circle cx="221" cy="464" r="13" class="n-claude"/><text x="221" y="469" text-anchor="middle" class="t-b">3</text>
+  </g>
+  <text x="470" y="470" class="t-s"><tspan class="t-b">1</tspan> la session attend : <tspan class="t-m">annotate wait</tspan> rend les notes</text>
+  <text x="470" y="498" class="t-s"><tspan class="t-b">2</tspan> elle est ouverte : boîte de réception</text>
+  <text x="470" y="526" class="t-s"><tspan class="t-b">3</tspan> fermée : onglet <tspan class="t-m">claude --resume</tspan></text>
+</svg></div>
+<figcaption>Dessiné dans la page : il suit le thème clair ou sombre, et son texte se corrige comme le reste du document. <span class="pan-hint">Faire glisser la figure.</span></figcaption>
+</figure>
+
+<h3><span class="tag avec">avec</span> epic-infographics, langage <code>editorial</code> <span class="sub">2 min 25 s · PNG 4,3 Mo · source <code>figures/boucle-epic.html</code></span></h3>
+<figure>
+<div class="pan"><img src="figures/boucle-epic.png" alt="La boucle de docpin en cinq étapes autour d'une page épinglée : la session écrit le document, le registre le prend, le démon le sert, le navigateur y épingle une note, le retour la rend à la session." width="2400" height="1880"></div>
+<figcaption>Une page de magazine : titre, chapô, objet dessiné (la page épinglée), grain d'impression. Le texte fait partie de l'image. <span class="pan-hint">Faire glisser la figure.</span></figcaption>
+</figure>
+
+<p>Le skill impose ce que la version par défaut n'a pas : un titre et un chapô dans la figure, un objet qui porte le sujet (la page et son épingle), une piste numérotée qui se lit sans légende. La version par défaut dit la même chose plus sèchement, mais elle dit une chose de plus : les <strong>trois issues</strong> du retour sont tracées, alors que l'image les range dans une phrase.</p>
+
+<h2>2. La planche de chiffres</h2>
+<p class="sub">Comptés dans le <code>CLAUDE.md</code> du dépôt, pas supposés : 19 lignes au tableau des invariants, 15 entrées dans « Ce qui n'est pas évident », et les valeurs de configuration citées (30 s, 8765, 7 jours, 50 sessions).</p>
+
+<h3><span class="tag sans">sans</span> SVG en ligne <span class="sub">54 s · 3,9 Ko</span></h3>
+<figure>
+<div class="pan"><svg class="fig" viewBox="0 0 960 440" role="img" aria-labelledby="sb-t sb-d">
+  <title id="sb-t">docpin en chiffres</title>
+  <desc id="sb-d">19 invariants tenus par des tests ; 2 voies d'entrée au registre ; parcours toutes les 30 secondes ; port 8765 ; 3 issues pour rendre les notes ; 0 dépendance d'exécution ; rattrapage sur 7 jours ; 15 pièges documentés.</desc>
+
+  <!-- hero: 19 invariants, one square per invariant -->
+  <rect x="10" y="10" width="360" height="420" rx="16" class="n-docpin"/>
+  <text x="40" y="150" class="t-hero">19</text>
+  <text x="40" y="196" class="t-h">invariants</text>
+  <text x="40" y="224" class="t-s">chacun tenu par un test nommé,</text>
+  <text x="40" y="248" class="t-s">pas par la relecture</text>
+  <g class="f-docpin">
+    <rect x="40" y="276" width="40" height="28" rx="5"/><rect x="88" y="276" width="40" height="28" rx="5"/><rect x="136" y="276" width="40" height="28" rx="5"/><rect x="184" y="276" width="40" height="28" rx="5"/><rect x="232" y="276" width="40" height="28" rx="5"/><rect x="280" y="276" width="40" height="28" rx="5"/>
+    <rect x="40" y="312" width="40" height="28" rx="5"/><rect x="88" y="312" width="40" height="28" rx="5"/><rect x="136" y="312" width="40" height="28" rx="5"/><rect x="184" y="312" width="40" height="28" rx="5"/><rect x="232" y="312" width="40" height="28" rx="5"/><rect x="280" y="312" width="40" height="28" rx="5"/>
+    <rect x="40" y="348" width="40" height="28" rx="5"/><rect x="88" y="348" width="40" height="28" rx="5"/><rect x="136" y="348" width="40" height="28" rx="5"/><rect x="184" y="348" width="40" height="28" rx="5"/><rect x="232" y="348" width="40" height="28" rx="5"/><rect x="280" y="348" width="40" height="28" rx="5"/>
+    <rect x="40" y="384" width="40" height="28" rx="5"/>
+  </g>
+
+  <!-- support tiles, 4 x 2 -->
+  <g>
+    <rect x="390" y="10" width="270" height="130" rx="14" class="n-claude"/>
+    <text x="414" y="78" class="t-num">2</text>
+    <text x="470" y="62" class="t-b">voies d'entrée</text>
+    <text x="470" y="86" class="t-s">hook + parcours</text>
+    <text x="414" y="120" class="t-s">Write/Edit, puis Bash</text>
+  </g>
+  <g>
+    <rect x="680" y="10" width="270" height="130" rx="14" class="n-claude"/>
+    <text x="704" y="78" class="t-num">30 s</text>
+    <text x="822" y="62" class="t-b">par passage</text>
+    <text x="822" y="86" class="t-s">du parcours</text>
+    <text x="704" y="120" class="t-s">rien avant le 1er passage</text>
+  </g>
+  <g>
+    <rect x="390" y="155" width="270" height="130" rx="14" class="n-plat"/>
+    <text x="414" y="223" class="t-num">3</text>
+    <text x="470" y="207" class="t-b">issues d'envoi</text>
+    <text x="470" y="231" class="t-s">wait · boîte · onglet</text>
+    <text x="414" y="265" class="t-s">livrées une seule fois</text>
+  </g>
+  <g>
+    <rect x="680" y="155" width="270" height="130" rx="14" class="n-plain"/>
+    <text x="704" y="223" class="t-num t-mono">8765</text>
+    <text x="826" y="207" class="t-b">port local</text>
+    <text x="826" y="231" class="t-s">démon local</text>
+    <text x="704" y="265" class="t-s">127.0.0.1, pas localhost</text>
+  </g>
+  <g>
+    <rect x="390" y="300" width="175" height="130" rx="14" class="n-plain"/>
+    <text x="410" y="368" class="t-num">0</text>
+    <text x="410" y="398" class="t-s">dépendance</text>
+    <text x="410" y="420" class="t-s">d'exécution</text>
+  </g>
+  <g>
+    <rect x="582" y="300" width="175" height="130" rx="14" class="n-plain"/>
+    <text x="602" y="368" class="t-num">7 j</text>
+    <text x="602" y="398" class="t-s">fenêtre du</text>
+    <text x="602" y="420" class="t-s">rattrapage</text>
+  </g>
+  <g>
+    <rect x="775" y="300" width="175" height="130" rx="14" class="n-plain"/>
+    <text x="795" y="368" class="t-num">15</text>
+    <text x="795" y="398" class="t-s">pièges payés</text>
+    <text x="795" y="420" class="t-s">et documentés</text>
+  </g>
+</svg></div>
+<figcaption>Tuiles dessinées, un carré par invariant. Lisible, mais c'est une grille de cartes : exactement le « tableau de bord » que le skill refuse. <span class="pan-hint">Faire glisser la figure.</span></figcaption>
+</figure>
+
+<h3><span class="tag avec">avec</span> epic-infographics, langage <code>editorial</code> <span class="sub">1 min 25 s · PNG 4,2 Mo · source <code>figures/chiffres-epic.html</code></span></h3>
+<figure>
+<div class="pan"><img src="figures/chiffres-epic.png" alt="docpin en chiffres : 19 invariants tenus par des tests ; 2 voies d'entrée ; 30 s entre deux parcours ; port 8765 ; 3 issues ; 7 jours de rattrapage ; 50 sessions proposées au plus ; 15 pièges documentés ; 0 dépendance d'exécution." width="2400" height="2120"></div>
+<figcaption>Un numéral géant, une liste réglée où chaque glyphe compte sa valeur. Le contrôle du skill a signalé un héros « faible » (5 % du canevas) : gardé, il fait treize fois le corps du texte. <span class="pan-hint">Faire glisser la figure.</span></figcaption>
+</figure>
+
+<h2>3. Le comparatif mesuré</h2>
+<div class="legend"><span><i style="background:var(--good)"></i>avantage</span><span><i style="background:var(--bad)"></i>désavantage</span><span><i style="background:var(--line)"></i>égalité</span></div>
+<div class="table-wrap">
+<table>
+<thead><tr><th>Critère</th><th>Sans (SVG en ligne)</th><th>Avec (epic-infographics)</th><th>Comment c'est mesuré</th></tr></thead>
+<tbody>
+<tr><td>Temps de production</td><td class="win">1 min 23 s + 54 s = 2 min 17 s</td><td class="lose">2 min 25 s + 1 min 25 s = 3 min 50 s</td><td>horloge murale, de la première écriture à la dernière correction regardée ; le skill inclut la lecture de ses 4 références (≈ 26 Ko), payée à la première figure</td></tr>
+<tr><td>Boucles de correction</td><td class="tie">2 (a), 2 (b)</td><td class="tie">1 (a), 1 (b)</td><td>rendus regardés puis corrigés ; le contrôle du skill a rendu 0 erreur dès le premier passage</td></tr>
+<tr><td>Poids</td><td class="win">4,2 Ko + 3,9 Ko</td><td class="lose">4,3 Mo + 4,2 Mo (PNG ×2), + 19 Ko de sources</td><td><code>stat</code> ; sans grain et en 1×, la boucle tombe à 0,48 Mo</td></tr>
+<tr><td>Mode sombre</td><td class="win">suit le système, vérifié en capture</td><td class="lose">reste sur fond papier clair</td><td>captures <code>prefers-color-scheme: dark</code></td></tr>
+<tr><td>Corriger un mot</td><td class="win">éditer le HTML du document</td><td class="lose">éditer la source, relancer le contrôle et le rendu</td><td>deux fichiers à garder synchrones au lieu d'un</td></tr>
+<tr><td>Corps du texte affiché, colonne de bureau (922 px)</td><td class="win">16,3 px (le plus petit 15,4)</td><td class="lose">15,4 px boucle, 13,8 px chiffres (le plus petit 11,5)</td><td>taille calculée dans le navigateur : corps source × largeur affichée ÷ largeur du canevas</td></tr>
+<tr><td>Corps du texte affiché, téléphone (390 px)</td><td class="lose">5,9 px ajusté ; 13,5 px en glissant</td><td class="lose">5,0 à 5,5 px ajusté ; 11,4 à 12,7 px en glissant</td><td>ajusté à l'écran (332 px), puis figure à 760 px qu'on fait glisser ; aucune des deux ne se réagence</td></tr>
+<tr><td>Dépendances</td><td class="win">aucune</td><td class="lose">Node, Playwright + Chromium (dans le dossier du skill), Google Fonts au rendu</td><td>hors ligne, Fraunces et Libre Franklin retombent sur une police de repli</td></tr>
+<tr><td>Ce que docpin épingle</td><td class="win">le mot cliqué et le texte de la figure : <code>at: "[[Démon]] annotate"</code></td><td class="lose">l'image entière et des coordonnées : <code>quote: ""</code>, <code>at: ""</code>, <code>offset 719, 231</code></td><td>démon isolé (port 8799, données jetables), Alt+clic réel sur chaque figure, annotations relues par l'API</td></tr>
+<tr><td>Qualité graphique</td><td class="lose">schéma propre, tuiles de tableau de bord</td><td class="win">composition, hiérarchie, objet porteur de sens</td><td>jugement sur les captures, pas une mesure</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>4. Recommandation</h2>
+<div class="verdict"><p><strong>Ce qui départage, c'est l'annotation, pas l'esthétique.</strong> Le skill fait de plus belles figures, et il le fait sans faute dès le premier contrôle. Mais docpin existe pour qu'une note revienne à la session avec ce qu'elle vise. Sur le SVG, la session reçoit le mot cliqué ; sur le PNG, elle reçoit « l'image, en 719, 231 » et doit ouvrir l'image pour comprendre. S'y ajoutent le mode sombre perdu, un poids multiplié par mille et un second fichier à tenir à jour.</p><p><strong>Package docpin : non.</strong> Il ajoute Node, Playwright, Chromium et un accès réseau aux polices, à côté d'un outil dont le premier invariant est « aucune dépendance hors bibliothèque standard ». <strong>Seconde machine : oui</strong>, si l'on veut que la mention d'<code>epic-infographics</code> dans <code>infographies.md</code> y mène quelque part : c'est un plugin utilisateur, sans effet sur les documents tant qu'on ne l'invoque pas.</p><p>Ce qui ferait changer d'avis : une figure destinée à sortir du document (réseau social, diapositive), où ni l'annotation ni le mode sombre ne comptent.</p></div>
+
+<details>
+<summary>La preuve : chronomètres, poids, contrôles</summary>
+<pre># chronomètres (date +%s.%N avant la première écriture, après la dernière capture regardée)
+sans_a 83 s   sans_b 54 s   avec_a 145 s   avec_b 85 s
+
+# poids (stat -c &#x27;%n %s&#x27;)
+sans_a.svg (fragment en ligne)   4247 o
+sans_b.svg (fragment en ligne)   3922 o
+figures/boucle-epic.png       4275612 o   2400 x 1880, rendu @2x
+figures/chiffres-epic.png     4226196 o   2400 x 2120, rendu @2x
+figures/boucle-epic.html         7914 o
+figures/chiffres-epic.html      10989 o
+boucle sans grain, @2x        1309090 o
+boucle sans grain, @1x         475317 o
+
+# contrôle du skill (scripts/check.mjs)
+boucle-epic.html    check: 0 error(s), 0 warning(s) — 24 text elements checked
+chiffres-epic.html  ! warn hero-weak  &quot;19&quot; covers 5% of the canvas
+                    check: 0 error(s), 1 warning(s) — 33 text elements checked
+
+# épinglage : démon isolé (port 8799, données dans un dossier jetable),
+# Alt+clic sur le mot « Démon » du SVG, puis sur « Le démon » dans le PNG
+{&quot;selector&quot;: &quot;... figure:nth-of-type(1) &gt; svg:nth-of-type(1)&quot;,
+ &quot;quote&quot;: &quot;La boucle de docpin Une session écrit un document HTML ; ...&quot;,
+ &quot;at&quot;: &quot;[[Démon]] annotate&quot;, &quot;offset_x&quot;: 735.0, &quot;offset_y&quot;: 71.0}
+{&quot;selector&quot;: &quot;... figure:nth-of-type(2) &gt; img:nth-of-type(1)&quot;,
+ &quot;quote&quot;: &quot;&quot;, &quot;at&quot;: &quot;&quot;, &quot;offset_x&quot;: 719.0, &quot;offset_y&quot;: 231.0}
+
+# corps affiché (taille source x largeur affichée / largeur du canevas)
+980 px : SVG 16,3 px (min 15,4) | boucle PNG 15,4 (min 11,5) | chiffres PNG 13,8 (min 11,5)
+390 px, ajusté : SVG 5,9 px (min 5,5)   | boucle PNG 5,5 (min 4,2)   | chiffres PNG 5,0 (min 4,2)
+390 px, figure à 760 px qu&#x27;on fait glisser : SVG 13,5 (min 12,7) | boucle PNG 12,7 (min 9,5) | chiffres PNG 11,4 (min 9,5)</pre>
+</details>
+
+<div class="todo"><strong>À décider</strong>
+<ol>
+<li>Installer le skill sur la seconde machine : oui, recommandé — décision d'Ali</li>
+<li>L'inclure dans le package docpin : non, recommandé — décision d'Ali</li>
+<li>Les deux PNG pèsent 8,5 Mo dans un dépôt public : les garder tels que le skill les rend, ou les refaire sans grain en 1× (≈ 0,5 Mo chacun) — décision d'Ali</li>
+</ol></div>
+</main>
+</body>
+</html>

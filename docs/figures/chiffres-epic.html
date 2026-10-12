@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- visuel : dérogation — source HTML d'une figure rendue en PNG par epic-infographics -->
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>docpin en chiffres</title>
+<!-- Composition: Editorial spread (1/3 towering numeral : 2/3 charticle rows). Language: editorial. Canvas 1200x1060. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,400&family=Libre+Franklin:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+img, svg { display: block; max-width: 100%; }
+:root {
+  --canvas-w: 1200px; --canvas-h: 1060px;
+  --bg:#FAF7F2; --surface:#F1ECE2; --surface-2:#E3DCCC;
+  --ink:#20242C; --ink-muted:#6B6F76;
+  --accent:#A32035;
+  --chart-1:#A32035; --chart-2:#0D7F63; --chart-3:#B07C1F; --chart-4:#20242C;
+  --de-emphasis:#C6BFB0;
+  --font-display:'Fraunces',serif; --font-body:'Libre Franklin',sans-serif;
+  --space-1:8px; --space-2:16px; --space-3:24px; --space-4:48px; --space-5:72px;
+  --radius:0;
+  --rule-hair:1px solid var(--ink); --rule-heavy:3px solid var(--ink);
+}
+html, body { background: var(--bg); }
+body { width: var(--canvas-w); font-family: var(--font-body); color: var(--ink); }
+.canvas { position: relative; width: var(--canvas-w); height: var(--canvas-h); overflow: hidden;
+  background: radial-gradient(ellipse at 20% 40%, var(--surface) 0%, var(--bg) 60%); }
+.grain { position:absolute; inset:0; pointer-events:none; z-index:50; opacity:.22; mix-blend-mode:multiply;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.6 0.6 0.6 0 0'/%3E%3C/filter%3E%3Crect width='240' height='240' filter='url(%23n)' opacity='0.25'/%3E%3C/svg%3E"); }
+.folio { position:absolute; left:72px; right:72px; top:48px; padding: var(--space-1) 0;
+  border-top: var(--rule-hair); border-bottom: var(--rule-hair);
+  font: 600 15px/1 var(--font-body); letter-spacing:.14em; text-transform:uppercase; color: var(--ink-muted);
+  display:flex; justify-content:space-between; }
+/* left: the towering column */
+.tower { position:absolute; left:72px; top:110px; width:360px; height:880px; border-right: var(--rule-hair); }
+.hero { position:absolute; left:-14px; top:40px; font: 900 300px/0.8 var(--font-display); letter-spacing:-0.04em; }
+.tower .lab { position:absolute; left:0; top:300px; width:250px; font: 600 26px/1.2 var(--font-body); }
+.tower .sub { position:absolute; left:0; top:376px; width:310px; font: italic 400 23px/1.4 var(--font-display); }
+.tower svg { position:absolute; left:0; top:520px; }
+.tower .cap { position:absolute; left:0; top:590px; width:300px; font: 400 19px/1.35 var(--font-body); color: var(--ink-muted); }
+/* right: charticle */
+h1 { position:absolute; left:480px; top:118px; font: 900 60px/0.95 var(--font-display); letter-spacing:-0.015em; }
+.standfirst { position:absolute; left:480px; top:190px; width:648px; padding-bottom: var(--space-2);
+  border-bottom: var(--rule-heavy); font: italic 400 23px/1.4 var(--font-display); }
+.rows { position:absolute; left:480px; top:300px; width:648px; }
+.row { display:grid; grid-template-columns: 128px 1fr 140px; align-items:center; column-gap: var(--space-3);
+  height:80px; border-bottom: var(--rule-hair); }
+.row .n { font: 900 46px/1 var(--font-display); }
+.row .n.mono { font: 600 34px/1 ui-monospace, Menlo, monospace; }
+.row b { display:block; font: 600 21px/1.2 var(--font-body); }
+.row span { display:block; font: 400 18px/1.3 var(--font-body); color: var(--ink-muted); }
+.foot { position:absolute; left:72px; right:72px; bottom:36px; padding-top: var(--space-1);
+  border-top: var(--rule-hair); font: 400 18px/1.3 var(--font-body); color: var(--ink-muted); }
+</style>
+</head>
+<body>
+<div class="canvas">
+  <div class="folio"><span>docpin · en chiffres</span><span>No. 02</span></div>
+
+  <div class="tower">
+    <div class="hero" data-hero>19</div>
+    <div class="lab">invariants tenus par des tests</div>
+    <div class="sub">pas par la relecture : chacun a son test nommé dans le CLAUDE.md.</div>
+    <!-- 19 tally marks, the one oxblood device -->
+    <svg width="300" height="48" viewBox="0 0 300 48" aria-hidden="true">
+      <g fill="#A32035">
+        <rect x="0" y="4" width="5" height="40"/><rect x="15" y="4" width="5" height="40"/><rect x="30" y="4" width="5" height="40"/><rect x="45" y="4" width="5" height="40"/><rect x="60" y="4" width="5" height="40"/>
+        <rect x="81" y="4" width="5" height="40"/><rect x="96" y="4" width="5" height="40"/><rect x="111" y="4" width="5" height="40"/><rect x="126" y="4" width="5" height="40"/><rect x="141" y="4" width="5" height="40"/>
+        <rect x="162" y="4" width="5" height="40"/><rect x="177" y="4" width="5" height="40"/><rect x="192" y="4" width="5" height="40"/><rect x="207" y="4" width="5" height="40"/><rect x="222" y="4" width="5" height="40"/>
+        <rect x="243" y="4" width="5" height="40"/><rect x="258" y="4" width="5" height="40"/><rect x="273" y="4" width="5" height="40"/><rect x="288" y="4" width="5" height="40"/>
+      </g>
+    </svg>
+    <div class="cap">un trait par invariant ; les propriétés centrales sont en outre éprouvées par mutation.</div>
+  </div>
+
+  <h1>docpin, en chiffres</h1>
+  <p class="standfirst">Ce que le dépôt affirme de lui-même, compté dans son mode d'emploi.</p>
+
+  <div class="rows">
+    <div class="row"><div class="n">2</div><div><b>voies d'entrée au registre</b><span>le hook, puis le parcours</span></div>
+      <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden="true"><g fill="#20242C"><rect x="0" y="6" width="6" height="28"/><rect x="14" y="6" width="6" height="28"/></g></svg></div>
+    <div class="row"><div class="n">30 s</div><div><b>entre deux parcours</b><span>rien d'antérieur au premier</span></div>
+      <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden="true"><circle cx="18" cy="20" r="17" fill="none" stroke="#20242C" stroke-width="1.5"/><path d="M18 20 L18 3 A17 17 0 0 1 18 37 Z" fill="#20242C"/></svg></div>
+    <div class="row"><div class="n mono">8765</div><div><b>port du démon</b><span>sur 127.0.0.1, jamais localhost</span></div>
+      <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden="true"><rect x="1" y="8" width="34" height="24" fill="none" stroke="#20242C" stroke-width="1.5"/><rect x="9" y="16" width="18" height="8" fill="#20242C"/></svg></div>
+    <div class="row"><div class="n">3</div><div><b>issues pour rendre les notes</b><span>attente, boîte de réception, onglet</span></div>
+      <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden="true"><g fill="#20242C"><circle cx="8" cy="20" r="7"/><circle cx="30" cy="20" r="7"/><circle cx="52" cy="20" r="7"/></g></svg></div>
+    <div class="row"><div class="n">7 j</div><div><b>de rattrapage par défaut</b><span>Rescan, ou ajout d'un dossier</span></div>
+      <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden="true"><g fill="#20242C"><rect x="0" y="13" width="14" height="14"/><rect x="18" y="13" width="14" height="14"/><rect x="36" y="13" width="14" height="14"/><rect x="54" y="13" width="14" height="14"/><rect x="72" y="13" width="14" height="14"/><rect x="90" y="13" width="14" height="14"/><rect x="108" y="13" width="14" height="14"/></g></svg></div>
+    <div class="row"><div class="n">50</div><div><b>sessions proposées au plus</b><span>les sessions ouvertes d'abord</span></div>
+      <svg width="140" height="48" viewBox="0 0 140 48" aria-hidden="true"><g fill="#20242C">
+        <circle cx="3" cy="4" r="2.5"/><circle cx="15" cy="4" r="2.5"/><circle cx="27" cy="4" r="2.5"/><circle cx="39" cy="4" r="2.5"/><circle cx="51" cy="4" r="2.5"/><circle cx="63" cy="4" r="2.5"/><circle cx="75" cy="4" r="2.5"/><circle cx="87" cy="4" r="2.5"/><circle cx="99" cy="4" r="2.5"/><circle cx="111" cy="4" r="2.5"/>
+        <circle cx="3" cy="14" r="2.5"/><circle cx="15" cy="14" r="2.5"/><circle cx="27" cy="14" r="2.5"/><circle cx="39" cy="14" r="2.5"/><circle cx="51" cy="14" r="2.5"/><circle cx="63" cy="14" r="2.5"/><circle cx="75" cy="14" r="2.5"/><circle cx="87" cy="14" r="2.5"/><circle cx="99" cy="14" r="2.5"/><circle cx="111" cy="14" r="2.5"/>
+        <circle cx="3" cy="24" r="2.5"/><circle cx="15" cy="24" r="2.5"/><circle cx="27" cy="24" r="2.5"/><circle cx="39" cy="24" r="2.5"/><circle cx="51" cy="24" r="2.5"/><circle cx="63" cy="24" r="2.5"/><circle cx="75" cy="24" r="2.5"/><circle cx="87" cy="24" r="2.5"/><circle cx="99" cy="24" r="2.5"/><circle cx="111" cy="24" r="2.5"/>
+        <circle cx="3" cy="34" r="2.5"/><circle cx="15" cy="34" r="2.5"/><circle cx="27" cy="34" r="2.5"/><circle cx="39" cy="34" r="2.5"/><circle cx="51" cy="34" r="2.5"/><circle cx="63" cy="34" r="2.5"/><circle cx="75" cy="34" r="2.5"/><circle cx="87" cy="34" r="2.5"/><circle cx="99" cy="34" r="2.5"/><circle cx="111" cy="34" r="2.5"/>
+        <circle cx="3" cy="44" r="2.5"/><circle cx="15" cy="44" r="2.5"/><circle cx="27" cy="44" r="2.5"/><circle cx="39" cy="44" r="2.5"/><circle cx="51" cy="44" r="2.5"/><circle cx="63" cy="44" r="2.5"/><circle cx="75" cy="44" r="2.5"/><circle cx="87" cy="44" r="2.5"/><circle cx="99" cy="44" r="2.5"/><circle cx="111" cy="44" r="2.5"/>
+      </g></svg></div>
+    <div class="row"><div class="n">15</div><div><b>pièges payés, puis écrits</b><span>« ce qui n'est pas évident »</span></div>
+      <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden="true"><g fill="#20242C"><rect x="0" y="6" width="3" height="28"/><rect x="8" y="6" width="3" height="28"/><rect x="16" y="6" width="3" height="28"/><rect x="24" y="6" width="3" height="28"/><rect x="32" y="6" width="3" height="28"/><rect x="40" y="6" width="3" height="28"/><rect x="48" y="6" width="3" height="28"/><rect x="56" y="6" width="3" height="28"/><rect x="64" y="6" width="3" height="28"/><rect x="72" y="6" width="3" height="28"/><rect x="80" y="6" width="3" height="28"/><rect x="88" y="6" width="3" height="28"/><rect x="96" y="6" width="3" height="28"/><rect x="104" y="6" width="3" height="28"/><rect x="112" y="6" width="3" height="28"/></g></svg></div>
+    <div class="row"><div class="n">0</div><div><b>dépendance d'exécution</b><span>bibliothèque standard seule</span></div>
+      <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden="true"><rect x="1" y="6" width="28" height="28" fill="none" stroke="#20242C" stroke-width="1.5" stroke-dasharray="3 3"/></svg></div>
+  </div>
+
+  <div class="foot">Source : CLAUDE.md du dépôt docpin, octobre 2026. Chaque glyphe à droite compte la valeur, sauf le port.</div>
+  <div class="grain"></div>
+</div>
+</body>
+</html>
