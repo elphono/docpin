@@ -43,21 +43,40 @@ items marked **(proposal)** are ideas, not commitments.
 
 ## Next
 
-1. **First real run from Windows Chrome / Edge.** Alt+click has only been measured in headless
+1. **Carry a session to another machine** **(proposal, priority)**. Pick a conversation up on a
+   second computer, in the same state, through a server of your own (a public one later, if there is
+   an audience). First version: **Send** pushes the session's transcript (and docpin's state for its
+   documents) to the server; the other machine's daemon polls it and drops the transcript where
+   `claude --resume <id>` finds it. The code travels by git, as it does today. No concurrency to
+   handle: a session is never sent while it is being changed on the other side.
+   - **Measured on 2026-10-12** (two isolated homes, the project at a different path on each): the
+     transcript, copied into the other machine's project folder (its path with every
+     non-alphanumeric character turned into `-`), resumes there; the conversation is intact, the
+     session works in the new folder and never touches the old path, and the round trip back works.
+     Claude Code does not document this for the CLI, and the format is internal: keep both machines
+     on the same version.
+   - Nothing native covers it: Remote Control keeps the session on the first machine, and teleport
+     only pulls cloud sessions.
+   - What does not travel: background commands (an `annotate wait` is started again), uncommitted
+     files.
+   - **Before a server sees anything**: a filter that refuses the sessions of repositories that must
+     not leave a machine, and, for a public server, end-to-end encryption, so the server only holds
+     bytes it cannot read.
+2. **First real run from Windows Chrome / Edge.** Alt+click has only been measured in headless
    Chromium on Linux, and Alt alone can give the focus to the browser menu on Windows. The tray icon
    and its menu have not been looked at on a screen either. Fix whatever this shows.
-2. **More than pins: highlight, circle, strike-through** **(design done)**. Each annotation gets a
+3. **More than pins: highlight, circle, strike-through** **(design done)**. Each annotation gets a
    `kind`; text kinds anchor on an exact quote with a 32-character prefix and suffix (the Web
    Annotation `TextQuoteSelector` idea), which survives block reordering where a selector does not.
    The tool is chosen in the bar, as in a screenshot tool — no gesture recognition. The prompt changes
    by one word per note.
-3. **Watch the inbox route.** Posting into an open session's inbox relies on a line format that Claude
+4. **Watch the inbox route.** Posting into an open session's inbox relies on a line format that Claude
    Code does not document (captured on real messages, frozen by `tests/test_inbox.py`). Re-capture
    it when `peerProtocol` changes, and switch to a documented interface if one appears.
-4. **A render check for documents** **(proposal)**: light, dark and phone-width captures of a document,
+5. **A render check for documents** **(proposal)**: light, dark and phone-width captures of a document,
    its horizontal overflow and the smallest text of its figures, run by the skill instead of looked at
    by hand. Needs Playwright, declared by the plugin.
-5. **PyPI.** For whoever does not use Claude Code plugins: `uvx` / `pipx` without a clone.
+6. **PyPI.** For whoever does not use Claude Code plugins: `uvx` / `pipx` without a clone.
 
 ## Later
 
