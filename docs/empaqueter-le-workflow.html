@@ -463,7 +463,7 @@ outputStyle  visuel-dabord</pre>
 <!-- ============================================================ 2 -->
 <h2 id="leviers">2 · Ce qui pousse une session à dessiner, et une version plus simple</h2>
 <div class="verdict"><strong>Affirmation :</strong> aujourd'hui, quatre leviers et treize pièces, dont une seule
-contrainte qui s'exécute. On peut descendre à huit pièces, chaque règle écrite une fois, et confier à des
+contrainte qui s'exécute. On peut descendre à sept pièces, chaque règle écrite une fois, et confier à des
 mécanismes ce que la prose répète aujourd'hui en vain.</div>
 <div class="split l2">
   <div>
@@ -544,8 +544,8 @@ valeurs qui ne concordent pas.</figcaption>
 </figure>
 <figure class="narrowfig">
 <svg viewBox="0 0 420 486" role="img" aria-labelledby="c-t">
-  <title id="c-t">Proposé : 8 pièces, chaque règle écrite une fois</title>
-  <text x="24" y="32" class="s19b" style="fill: var(--gen)">Proposé : 8 pièces</text>
+  <title id="c-t">Proposé : 7 pièces, chaque règle écrite une fois</title>
+  <text x="24" y="32" class="s19b" style="fill: var(--gen)">Proposé : 7 pièces</text>
   <rect x="24" y="50" width="14" height="14" fill="none" stroke="var(--ink)" stroke-width="2"/><text x="46" y="63" class="s18 mut">texte</text>
   <rect x="120" y="50" width="14" height="14" fill="var(--ink)"/><text x="142" y="63" class="s18 mut">s'exécute</text>
   <path d="M262,57 L269,50 L276,57 L269,64 z" fill="var(--muted)"/><text x="284" y="63" class="s18 mut">outil</text>
@@ -556,7 +556,7 @@ valeurs qui ne concordent pas.</figcaption>
   <rect x="24" y="206" width="14" height="14" fill="var(--ink)"/><text x="48" y="219" class="s18">enregistreur docpin + consigne</text>
   <rect x="24" y="236" width="14" height="14" fill="none" stroke="var(--ink)" stroke-width="2"/><text x="48" y="249" class="s18">prompt de « Send » (même phrase)</text>
   <rect x="24" y="266" width="14" height="14" fill="none" stroke="var(--ink)" stroke-width="2"/><text x="48" y="279" class="s18">un fichier « pourquoi »</text>
-  <path d="M24,303 L31,296 L38,303 L31,310 z" fill="var(--muted)"/><text x="48" y="309" class="s18">skill d'infographies (optionnel)</text>
+  <path d="M24,303 L31,296 L38,303 L31,310 z" fill="var(--muted)"/><text x="48" y="309" class="s18 mut">skill d'infographies : hors du paquet</text>
   <rect x="16" y="330" width="396" height="146" rx="10" fill="none" stroke="var(--gen)" stroke-width="2" class="dash"/>
   <text x="30" y="356" class="s18" style="fill: var(--gen)">chaque règle écrite une fois</text>
   <text x="30" y="381" class="s18" style="fill: var(--gen)">seuils : dans le code seulement</text>
@@ -630,7 +630,7 @@ dit ce qui part tel quel, ce qui part moyennant un changement nommé, et ce qui 
 <td>Figure riche rendue en PNG : page HTML + SVG, préflight, rendu, relecture de sa propre image.</td>
 <td>marketplace GitHub tierce déclarée dans les settings ; copie dans <code>~/.claude/plugins/cache/epic-infographics/…</code></td>
 <td>node, Playwright 1.62.1 dans son propre <code>node_modules</code>, Chromium ; installation à la main : <code>npm install &amp;&amp; npx playwright install chromium</code></td>
-<td><span class="tag gen">généralisable</span> Public, et réellement utilisé (section 5). Activé dans les settings locaux seulement, délibérément.</td></tr>
+<td><span class="tag gen">généralisable</span> Public, et réellement utilisé (section 5). Activé dans les settings locaux seulement, délibérément. <b>Hors du paquet</b>, décidé le 2026-10-12 après le comparatif <code>avec-ou-sans-infographies.html</code>.</td></tr>
 <tr><td><b>Ajout local <code>plancher-corps.mjs</code></b></td>
 <td>Mesure la taille calculée de chaque texte rendu, plancher 24 px.</td>
 <td>écrit le 2026-09-11 dans le cache du plugin, à côté de ses scripts</td>
@@ -1286,7 +1286,8 @@ existe ; d'ici là, rien ne change dans sa config.</div>
 
 <div class="dec ali"><h3>Q1 · Ce que contient le paquet public <span class="tag gen">décidé le 2026-10-09</span></h3>
 <div class="what">La boucle et un skill « documents annotables » dans le plugin docpin ; le style « visuel
-d'abord » et le contrôleur de documents dans un second plugin, optionnel.</div>
+d'abord » et le contrôleur de documents dans un second plugin, optionnel. Le skill d'infographies
+n'entre dans aucun des deux (2026-10-12) : il reste un plugin tiers, que chacun installe s'il le veut.</div>
 <details class="l2"><summary>Les issues considérées</summary>
 <div class="scroll"><table>
 <thead><tr><th>Issue</th><th>Ce que ça donne</th><th>Ce que ça coûte</th></tr></thead>
