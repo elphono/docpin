@@ -14,7 +14,14 @@ choisi est traqué").
 | Folder                          | What is tracked under it                    |
 |---------------------------------|---------------------------------------------|
 | the default one, the workspace  | every .html with a `docs/` folder on the way (`docs_only`) |
+| the default without a workspace | the same rule under the home directory, written by a session only (`scan: false`) |
 | a folder the user added         | every .html, at any depth                   |
+
+**The home directory is never walked** (`scan: false`): measured 2026-10-12,
+one pass over a developer's home took 33.6 s, against 0.3 s for the
+workspace, and the daemon walks every 30 s. Without a workspace, a document
+is therefore found when a session writes it (the hook), or when the user adds
+its folder; one written by Bash waits for that.
 
 In both cases nothing under a `SKIPPED` folder is a document. The default
 entry exists only while the file does not: once the user adds or removes a
@@ -54,7 +61,17 @@ def home() -> Path:
 
 
 def _default() -> list[dict[str, Any]]:
-    return [{"path": str(config.workspace().expanduser().resolve()), "docs_only": True}]
+    workspace = config.workspace().expanduser()
+    if workspace.is_dir():
+        return [{"path": str(workspace.resolve()), "docs_only": True}]
+    return [{"path": str(home()), "docs_only": True, "scan": False}]
+
+
+def _entry(item: dict[str, Any]) -> dict[str, Any]:
+    entry = {"path": str(item["path"]), "docs_only": bool(item.get("docs_only"))}
+    if item.get("scan") is False:
+        entry["scan"] = False
+    return entry
 
 
 def load() -> list[dict[str, Any]]:
@@ -67,8 +84,8 @@ def load() -> list[dict[str, Any]]:
     items = data.get("folders") if isinstance(data, dict) else None
     if not isinstance(items, list):
         raise FoldersError(f"{path()}: no 'folders' list")
-    return [{"path": str(item["path"]), "docs_only": bool(item.get("docs_only"))}
-            for item in items if isinstance(item, dict) and isinstance(item.get("path"), str)]
+    return [_entry(item) for item in items
+            if isinstance(item, dict) and isinstance(item.get("path"), str)]
 
 
 def _save(items: list[dict[str, Any]]) -> None:
@@ -146,10 +163,11 @@ def wanted(path: Path, items: list[dict[str, Any]] | None = None) -> bool:
 
 
 def roots(items: list[dict[str, Any]]) -> list[Path]:
-    """The folders to walk: a folder inside another one is already visited by
+    """The folders to walk, never a `scan: false` one: a folder inside another one is already visited by
     that one's walk, unless a SKIPPED folder lies between them (`~` prunes
     `.claude`, so `~/.claude/sync/docs` must be walked on its own)."""
-    paths = sorted({Path(i["path"]) for i in items}, key=lambda p: len(p.parts))
+    paths = sorted({Path(i["path"]) for i in items if i.get("scan") is not False},
+                   key=lambda p: len(p.parts))
     kept: list[Path] = []
     for folder in paths:
         covered = any(folder != outer and folder.is_relative_to(outer)

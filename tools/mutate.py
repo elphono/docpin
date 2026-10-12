@@ -280,6 +280,18 @@ MUTATIONS = (
              "    if (!result.tooMany && !items.length) return null;\n",
              "",
              "nothing is drawn when nothing changed", browser=True),
+    Mutation("home-walked", "src/annotate/folders.py",
+             '    paths = sorted({Path(i["path"]) for i in items if i.get("scan") is not False},\n',
+             '    paths = sorted({Path(i["path"]) for i in items},\n',
+             "the home directory is never walked (33 s a pass)"),
+    Mutation("native-uses-windows", "src/annotate/browser.py",
+             "    native = NATIVE.get(config.platform())\n    if native:\n",
+             "    native = NATIVE.get(config.platform())\n    if False:\n",
+             "Linux and macOS open the URL with their own opener"),
+    Mutation("terminal-template-ignored", "src/annotate/terminal.py",
+             "    if template:\n        if not any(",
+             "    if False:\n        if not any(",
+             "the configured terminal wins over the platform's"),
 )
 
 

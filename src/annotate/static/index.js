@@ -609,7 +609,8 @@
     for (const folder of data.folders) {
       const row = make('div', 'tracked');
       row.dataset.path = folder.path;
-      const rule = make('span', 'rule', folder.docs_only ? 'only under a docs/ folder' : 'every .html');
+      const rule = make('span', 'rule', (folder.docs_only ? 'only under a docs/ folder' : 'every .html')
+        + (folder.scan === false ? ', when a session writes it' : ''));
       if (!folder.exists) rule.append(make('span', 'badge danger', 'folder missing'));
       row.append(make('code', '', tilde(folder.path)), rule,
         button('Remove', 'ghost', 'Stop tracking this folder (its documents stay listed)',

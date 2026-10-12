@@ -3,7 +3,7 @@
     annotate register <path> [--session ID] [--cwd DIR] [--hook]
     annotate wait <id>
     annotate list
-    annotate open <id>
+    annotate open [<id>]
     annotate send <id>
     annotate new-session <id>
     annotate forget <id> [--delete]
@@ -122,8 +122,11 @@ def cmd_list(args: argparse.Namespace, cfg: config.Config) -> int:
 
 
 def cmd_open(args: argparse.Namespace, cfg: config.Config) -> int:
-    registry.get(args.id)
-    url = _url(cfg, args.id)
+    """Open a document, or without one the home page: the way to the page
+    where the tray icon does not exist (Linux, macOS)."""
+    if args.id:
+        registry.get(args.id)
+    url = _url(cfg, args.id) if args.id else f"http://127.0.0.1:{cfg.port}/"
     opener = browser.open_url(url)
     print(f"opened {url} with {opener}")
     return 0
@@ -196,6 +199,8 @@ def cmd_folders(args: argparse.Namespace, cfg: config.Config) -> int:
         return 0
     for item in folders.load():
         rule = "only under a docs/ folder" if item["docs_only"] else "every .html"
+        if item.get("scan") is False:
+            rule += ", when a session writes it (never walked)"
         missing = "" if Path(item["path"]).is_dir() else "  (missing)"
         print(f"{item['path']}  {rule}{missing}")
     return 0
@@ -282,8 +287,11 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("list", help="one line per document").set_defaults(run=cmd_list)
 
-    for name, run, text in (("open", cmd_open, "open the document in the browser"),
-                            ("send", cmd_send, "hand the unsent notes to a session"),
+    p = sub.add_parser("open", help="open a document in the browser, or the home page")
+    p.add_argument("id", nargs="?", default=None)
+    p.set_defaults(run=cmd_open)
+
+    for name, run, text in (("send", cmd_send, "hand the unsent notes to a session"),
                             ("new-session", cmd_new_session,
                              "open the unsent notes in a NEW session (terminal tab)")):
         p = sub.add_parser(name, help=text)

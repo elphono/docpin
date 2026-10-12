@@ -13,7 +13,9 @@ Precedence, highest first: environment variable, config file, default.
 | claude_bin     | ANNOTATE_CLAUDE          | "claude" (resolved on the PATH)  |
 | data_dir       | ANNOTATE_DATA_DIR        | ~/.local/share/annotate          |
 | workspace      | ANNOTATE_WORKSPACE       | ~/workspace (the default tracked folder) |
+| terminal       | (config file only)       | none: the platform's terminal (terminal.py) |
 | (config file)  | ANNOTATE_CONFIG          | ~/.config/annotate/config.toml   |
+| (platform)     | ANNOTATE_PLATFORM        | detected: wsl, linux, macos (`platform()`) |
 
 `claude_bin` is what the terminal tab runs (resolved to an absolute path by
 the daemon, see terminal.py); the tests point it at names that are not
@@ -38,6 +40,7 @@ class ConfigError(Exception):
 class Config:
     port: int = DEFAULT_PORT
     claude_bin: str = "claude"
+    terminal: tuple[str, ...] = ()
 
 
 def config_path() -> Path:
@@ -61,6 +64,42 @@ def workspace() -> Path:
     if env:
         return Path(env)
     return Path.home() / "workspace"
+
+
+PLATFORMS = ("wsl", "linux", "macos", "other")
+
+
+def platform() -> str:
+    """Which kind of machine this runs on. Three things depend on it, and
+    nothing else: how a URL reaches the browser (browser.py), how a terminal
+    tab opens (terminal.py), and whether the WSL distribution is needed.
+
+    | Kind    | Detected by                                             |
+    |---------|---------------------------------------------------------|
+    | `wsl`   | `WSL_DISTRO_NAME`, or "microsoft" in the kernel release |
+    | `macos` | `sys.platform == "darwin"` (not measured)               |
+    | `linux` | any other Linux                                         |
+    | `other` | anything else: no browser or terminal is guessed        |
+
+    `ANNOTATE_PLATFORM` overrides the detection: the tests use it, and so can
+    a user whose machine is detected wrongly."""
+    forced = os.environ.get("ANNOTATE_PLATFORM", "").strip().lower()
+    if forced in PLATFORMS:
+        return forced
+    if sys.platform == "darwin":
+        return "macos"
+    if not sys.platform.startswith("linux"):
+        return "other"
+    if os.environ.get("WSL_DISTRO_NAME"):
+        return "wsl"
+    return "wsl" if "microsoft" in kernel_release().lower() else "linux"
+
+
+def kernel_release() -> str:
+    try:
+        return Path("/proc/sys/kernel/osrelease").read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def annotate_command() -> str:
@@ -100,5 +139,8 @@ def load_config() -> Config:
 
     if not isinstance(claude, str) or not claude.strip():
         raise ConfigError(f"claude_bin must be a non-empty string, got {claude!r}")
+    terminal: object = raw.get("terminal", [])
+    if not (isinstance(terminal, list) and all(isinstance(t, str) and t for t in terminal)):
+        raise ConfigError(f"terminal must be a list of non-empty strings, got {terminal!r}")
     return Config(port=_as_int("port", port, 1, 65535),
-                  claude_bin=claude.strip())
+                  claude_bin=claude.strip(), terminal=tuple(terminal))

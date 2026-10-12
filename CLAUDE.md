@@ -173,6 +173,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | une session se range sous le dépôt qui contient son dossier (sous-dossier et worktree compris), jamais sous un dépôt du home ; les sessions d'un dépôt se regroupent, les documents sans session restent à part, en dernier | `test_each_session_group_names_the_repository_it_works_in`, `test_a_repository_in_the_home_directory_holds_no_session`, `tests/browser/index_check.mjs` |
 | la copie de référence est prise à chaque envoi, jamais à côté du document ; un envoi refusé la garde, une copie impossible la retire | `test_a_send_keeps_the_document_as_it_was_as_the_reference`, `test_a_refused_send_keeps_the_previous_reference`, `test_a_reference_that_cannot_be_written_is_removed_and_said`, `test_the_reference_never_lives_next_to_the_document` |
 | référence identique au fichier → rien de dessiné ; un ajout, une modification, un retrait → une marque chacun ; une section qui porte une note non envoyée ne se replie jamais ; rien ne se replie si un changement n'a pas été retrouvé ; le repli ne déplace aucune ancre | `tests/browser/changes_check.mjs` |
+| hors WSL, le navigateur et l'onglet passent par les outils de la plateforme (`xdg-open`, `open`, terminal natif, ou le `terminal` de `config.toml`), jamais par ceux de Windows ; sans workspace, les `docs/` du home sont des documents, mais le home n'est jamais parcouru | `tests/test_platforms.py` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 
@@ -246,6 +247,10 @@ copie du dépôt et exige que la suite tombe.
   changements. Le test du témoin lisait la page trop tôt et passait sans rien voir (mutation
   `witness-draws` survivante, 2026-10-12) ; l'overlay publie désormais `data-changes` sur
   `annotate-root` (`pending`, `none`, `shown`, `error`), et c'est là qu'on attend.
+- **Le home n'est jamais parcouru** : mesuré le 2026-10-12, un passage sur le home d'un poste de
+  développeur prend 33,6 s, contre 0,3 s pour le workspace, et le démon passe toutes les 30 s. Sans
+  workspace, le dossier par défaut est donc le home en `scan: false` : le hook y prend les `docs/`,
+  le parcours l'ignore (mutation `home-walked`).
 - **Une correction après livraison vaut réponse** : le hook ré-enregistre le document à chaque
   écriture, et `registry.register` fait alors passer `delivered` à `answered`. La barre du
   navigateur compare de son côté la date du fichier et propose « Reload ».

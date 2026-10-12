@@ -1,4 +1,4 @@
-"""Open an interactive Claude Code session in a Windows Terminal TAB.
+"""Open an interactive Claude Code session in a terminal TAB of the user.
 
 Used when the user sends notes and no open session listens for the document
 (see listeners.py): the producing session is resumed where the user can see
@@ -21,6 +21,16 @@ Three measured constraints shape the call:
   (where `claude` lives) is not on the PATH. The script also calls `claude`
   by the absolute path the daemon resolved.
 
+Outside WSL (config.platform) there is no Windows Terminal, and the same script
+runs in the first native terminal found:
+
+| Platform | Terminal                                                        |
+|----------|-----------------------------------------------------------------|
+| WSL      | `wt.exe` as above, else `cmd.exe /c start`                      |
+| Linux    | `x-terminal-emulator`, `gnome-terminal`, `konsole`, `xterm`     |
+| macOS    | Terminal.app through `osascript` (not measured)                 |
+| any      | `terminal = ["kitty", "bash", "-l", "{script}"]` in config.toml wins |
+
 The prompt reaches `claude` as ONE argument read from a file
 (`"$(cat …)"`): no quoting of user text ever happens on a command line. A
 prompt starting with `-` would be read as an option, so the prompt never
@@ -40,6 +50,11 @@ from . import config
 # Looked up on the PATH by name; a module constant so that the tests can point
 # it at a fake (the suite guard refuses any program named wt.exe).
 WT = "wt.exe"
+
+# Native terminals of a Linux desktop, first found wins, with the arguments
+# that come before the command they run.
+LINUX_TERMINALS = (("x-terminal-emulator", ("-e",)), ("gnome-terminal", ("--",)),
+                   ("konsole", ("-e",)), ("xterm", ("-e",)))
 
 
 class TerminalError(Exception):
@@ -95,8 +110,34 @@ def write_launch(doc_id: str, cwd: str, claude: str, resume: str | None,
     return script
 
 
-def command(doc_id: str, script: Path, wsl_distro: str) -> list[str]:
-    """The argv that opens the tab: wt.exe if found, else a plain console."""
+def command(doc_id: str, script: Path, wsl_distro: str | None,
+            template: tuple[str, ...] = ()) -> list[str]:
+    """The argv that opens the tab: the user's `terminal` template if set,
+    else the platform's terminal (table above)."""
+    if template:
+        if not any("{script}" in part for part in template):
+            raise TerminalError("the `terminal` setting must contain {script}, where "
+                                "the launch script goes")
+        return [part.replace("{script}", str(script)) for part in template]
+    platform = config.platform()
+    if platform == "linux":
+        for name, before in LINUX_TERMINALS:
+            found = shutil.which(name)
+            if found:
+                return [found, *before, "bash", "-l", str(script)]
+        raise TerminalError("no terminal found on the PATH (x-terminal-emulator, "
+                            "gnome-terminal, konsole, xterm): set `terminal` in "
+                            f"{config.config_path()}")
+    if platform == "macos":
+        osascript = shutil.which("osascript")
+        if not osascript:
+            raise TerminalError("osascript not found: no terminal can be opened")
+        # The script path holds no space, quote or ';' (write_launch refuses them).
+        return [osascript, "-e", f'tell application "Terminal" to do script "bash -l {script}"',
+                "-e", 'tell application "Terminal" to activate']
+    if platform != "wsl" or not wsl_distro:
+        raise TerminalError(f"no terminal is known for this platform ({platform}): set "
+                            f"`terminal` in {config.config_path()}")
     wsl = ["wsl.exe", "-d", wsl_distro, "-e", "bash", "-l", str(script)]
     wt = shutil.which(WT)
     if wt:
@@ -111,15 +152,22 @@ def command(doc_id: str, script: Path, wsl_distro: str) -> list[str]:
 
 def open_session(doc_id: str, cwd: str, claude_bin: str, resume: str | None,
                  prompt: str) -> str:
-    """Open the tab; return the program used (`wt.exe` or `cmd.exe`)."""
+    """Open the tab; return the program used (`wt.exe`, `cmd.exe`, a native
+    terminal, or the configured one)."""
     claude = shutil.which(claude_bin) or claude_bin
     if not Path(cwd).is_dir():
         raise TerminalError(f"the session folder {cwd} does not exist")
-    script = write_launch(doc_id, cwd, claude, resume, prompt)
-    argv = command(doc_id, script, distro())
-    windows_dir = os.path.dirname(argv[0])
     try:
-        done = subprocess.run(argv, cwd=windows_dir or None, capture_output=True,
+        template = config.load_config().terminal
+    except config.ConfigError as exc:
+        raise TerminalError(str(exc)) from exc
+    script = write_launch(doc_id, cwd, claude, resume, prompt)
+    on_wsl = not template and config.platform() == "wsl"
+    argv = command(doc_id, script, distro() if on_wsl else None, template)
+    # cmd.exe refuses a UNC working directory: run Windows programs from their own.
+    run_in = os.path.dirname(argv[0]) if on_wsl else None
+    try:
+        done = subprocess.run(argv, cwd=run_in or None, capture_output=True,
                               text=True, timeout=30)
     except (OSError, subprocess.SubprocessError) as exc:
         raise TerminalError(f"cannot start {argv[0]}: {exc}") from exc

@@ -38,12 +38,18 @@ from annotate import claude, folders, inbox
 FORBIDDEN_PROGRAMS = frozenset({
     "claude", "ssh", "scp", "cmd.exe", "explorer.exe", "wslview",
     "powershell.exe", "wsl.exe", "wt.exe", "reg.exe", "systemctl",
+    # the native openers and terminals of Linux and macOS (config.platform)
+    "xdg-open", "open", "osascript", "x-terminal-emulator", "gnome-terminal",
+    "konsole", "xterm",
 })
 
 
 @pytest.fixture(autouse=True)
 def _isolated_data(tmp_path, monkeypatch):
     monkeypatch.setenv("ANNOTATE_DATA_DIR", str(tmp_path / "annotate-data"))
+    # The platform the suite assumes unless a test says otherwise: the same
+    # answers on WSL, on a Linux CI runner and on macOS (config.platform).
+    monkeypatch.setenv("ANNOTATE_PLATFORM", "wsl")
     monkeypatch.setenv("ANNOTATE_CONFIG", str(tmp_path / "annotate-config.toml"))
     for name in ("ANNOTATE_PORT", "ANNOTATE_CLAUDE", "WSL_DISTRO_NAME",
                  # set when the suite runs inside a Claude Code session:
