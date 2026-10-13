@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Synchro entre machines — mise en place</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --page: #f6f7f9; --paper: #ffffff; --ink: #111827; --muted: #4b5563; --line: #e5e7eb;
+    --a: #4f46e5; --a-soft: #eef0ff; --drive: #0f9d58; --drive-soft: #e6f6ee;
+    --seal: #c2410c; --seal-soft: #fff1e6; --b: #0369a1; --b-soft: #e6f2fa;
+    --ok: #15803d; --warn: #b45309; --no: #b42318;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #0d1015; --paper: #161a21; --ink: #e7eaf0; --muted: #a3acb9; --line: #2a313c;
+      --a: #818cf8; --a-soft: rgba(129,140,248,.14); --drive: #34d399; --drive-soft: rgba(52,211,153,.12);
+      --seal: #fb923c; --seal-soft: rgba(251,146,60,.13); --b: #38bdf8; --b-soft: rgba(56,189,248,.12);
+      --ok: #4ade80; --warn: #fbbf24; --no: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 28px 16px 80px; }
+  h1 { font-size: 26px; line-height: 1.25; margin: 0 0 6px; }
+  h2 { font-size: 20px; margin: 40px 0 12px; }
+  .lead { color: var(--muted); margin: 0 0 22px; }
+  .card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  svg { width: 100%; height: auto; display: block; }
+  svg.narrow { display: none; max-width: 360px; margin: 0 auto; }
+  @media (max-width: 600px) { svg.wide { display: none; } svg.narrow { display: block; } }
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; fill: var(--ink); }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin: 14px 0 0; }
+  .tile { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .tile b { display: block; font-size: 22px; }
+  .tile span { font-size: 14px; color: var(--muted); }
+  ol.route { list-style: none; counter-reset: step; padding: 0; margin: 0; display: grid; gap: 10px; }
+  ol.route > li { counter-increment: step; position: relative; padding: 12px 14px 12px 54px;
+                  background: var(--paper); border: 1px solid var(--line); border-radius: 12px; }
+  ol.route > li::before { content: counter(step); position: absolute; left: 14px; top: 12px;
+                          width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+                          background: var(--drive); color: #fff; font-weight: 700; font-size: 14px; }
+  ol.route.machine > li::before { background: var(--a); }
+  li p { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+  code { font: 13.5px ui-monospace, "Cascadia Code", Consolas, monospace; background: var(--a-soft);
+         padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
+  .table { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; background: var(--paper); border: 1px solid var(--line);
+          border-radius: 12px; overflow: hidden; font-size: 15px; }
+  th, td { text-align: left; padding: 9px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--a-soft); font-size: 14px; }
+  .ok { color: var(--ok); font-weight: 700; } .warn { color: var(--warn); font-weight: 700; }
+  .no { color: var(--no); font-weight: 700; }
+  .todo { border-left: 4px solid var(--seal); background: var(--seal-soft); }
+  .todo ol { margin: 6px 0 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Synchro entre machines — mise en place</h1>
+<p class="lead">Ce qu'il faut faire une fois chez Google, puis une fois sur chaque machine, pour reprendre
+sur le mini-PC une conversation commencée sur ce PC, et l'inverse. Version 0.4.0 de docpin.</p>
+
+<div class="card" role="img" aria-label="Le trajet d'une conversation : Send sur la machine A, scellée, déposée dans le dossier caché de Drive, relevée par la machine B toutes les minutes, déposée dans son clone, Resume here">
+<svg class="wide" viewBox="0 0 820 250">
+  <rect x="10" y="40" width="200" height="170" rx="14" fill="var(--a-soft)" stroke="var(--a)" stroke-width="2"/>
+  <text x="110" y="68" text-anchor="middle" font-size="16" font-weight="700">Ce PC</text>
+  <text x="110" y="100" text-anchor="middle" font-size="14">1. Send a session…</text>
+  <text x="110" y="122" text-anchor="middle" font-size="13" fill="var(--muted)">ou ! annotate sync send</text>
+  <rect x="34" y="140" width="152" height="50" rx="10" fill="var(--seal-soft)" stroke="var(--seal)" stroke-width="2"/>
+  <text x="110" y="162" text-anchor="middle" font-size="14" font-weight="600">2. scellé ici</text>
+  <text x="110" y="180" text-anchor="middle" font-size="12.5" fill="var(--muted)">gzip + AES-256 + HMAC</text>
+  <rect x="310" y="70" width="200" height="110" rx="14" fill="var(--drive-soft)" stroke="var(--drive)" stroke-width="2"/>
+  <text x="410" y="100" text-anchor="middle" font-size="16" font-weight="700">Ton Google Drive</text>
+  <text x="410" y="124" text-anchor="middle" font-size="13.5">dossier caché de l'appli</text>
+  <text x="410" y="146" text-anchor="middle" font-size="13" fill="var(--muted)">des octets illisibles,</text>
+  <text x="410" y="164" text-anchor="middle" font-size="13" fill="var(--muted)">une copie par session</text>
+  <rect x="610" y="40" width="200" height="170" rx="14" fill="var(--b-soft)" stroke="var(--b)" stroke-width="2"/>
+  <text x="710" y="68" text-anchor="middle" font-size="16" font-weight="700">Le mini-PC</text>
+  <text x="710" y="100" text-anchor="middle" font-size="14">3. regarde toutes les 60 s</text>
+  <text x="710" y="126" text-anchor="middle" font-size="14">4. dans SON clone</text>
+  <text x="710" y="146" text-anchor="middle" font-size="12.5" fill="var(--muted)">retrouvé par le remote git</text>
+  <rect x="634" y="160" width="152" height="34" rx="10" fill="var(--paper)" stroke="var(--b)" stroke-width="2"/>
+  <text x="710" y="182" text-anchor="middle" font-size="14" font-weight="600">5. Resume here</text>
+  <path d="M210 125 H300" stroke="var(--seal)" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <path d="M510 125 H600" stroke="var(--b)" stroke-width="3" fill="none" marker-end="url(#arrow)"/>
+  <text x="410" y="230" text-anchor="middle" font-size="13" fill="var(--muted)">le code, lui, voyage par git, comme aujourd'hui</text>
+  <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0 0 L10 5 L0 10z" fill="var(--muted)"/></marker></defs>
+</svg>
+<svg class="narrow" viewBox="0 0 340 600">
+  <rect x="20" y="10" width="300" height="150" rx="14" fill="var(--a-soft)" stroke="var(--a)" stroke-width="2"/>
+  <text x="170" y="40" text-anchor="middle" font-size="18" font-weight="700">Ce PC</text>
+  <text x="170" y="68" text-anchor="middle" font-size="16">1. Send a session…</text>
+  <rect x="50" y="88" width="240" height="56" rx="10" fill="var(--seal-soft)" stroke="var(--seal)" stroke-width="2"/>
+  <text x="170" y="112" text-anchor="middle" font-size="16" font-weight="600">2. scellé ici</text>
+  <text x="170" y="134" text-anchor="middle" font-size="14" fill="var(--muted)">gzip + AES-256 + HMAC</text>
+  <path d="M170 160 V200" stroke="var(--seal)" stroke-width="3" marker-end="url(#arrow2)"/>
+  <rect x="20" y="208" width="300" height="110" rx="14" fill="var(--drive-soft)" stroke="var(--drive)" stroke-width="2"/>
+  <text x="170" y="240" text-anchor="middle" font-size="18" font-weight="700">Ton Google Drive</text>
+  <text x="170" y="268" text-anchor="middle" font-size="15">dossier caché de l'appli</text>
+  <text x="170" y="294" text-anchor="middle" font-size="14" fill="var(--muted)">des octets illisibles</text>
+  <path d="M170 318 V358" stroke="var(--b)" stroke-width="3" marker-end="url(#arrow2)"/>
+  <rect x="20" y="366" width="300" height="190" rx="14" fill="var(--b-soft)" stroke="var(--b)" stroke-width="2"/>
+  <text x="170" y="396" text-anchor="middle" font-size="18" font-weight="700">Le mini-PC</text>
+  <text x="170" y="426" text-anchor="middle" font-size="16">3. regarde toutes les 60 s</text>
+  <text x="170" y="454" text-anchor="middle" font-size="16">4. dans SON clone</text>
+  <text x="170" y="478" text-anchor="middle" font-size="14" fill="var(--muted)">retrouvé par le remote git</text>
+  <rect x="70" y="496" width="200" height="40" rx="10" fill="var(--paper)" stroke="var(--b)" stroke-width="2"/>
+  <text x="170" y="522" text-anchor="middle" font-size="16" font-weight="600">5. Resume here</text>
+  <text x="170" y="584" text-anchor="middle" font-size="14" fill="var(--muted)">le code voyage par git</text>
+  <defs><marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+    <path d="M0 0 L10 5 L0 10z" fill="var(--muted)"/></marker></defs>
+</svg>
+</div>
+<div class="tiles">
+  <div class="tile"><b>≈ 10 min</b><span>chez Google, une seule fois</span></div>
+  <div class="tile"><b>0 €</b><span>ton Drive, aucun serveur à tenir</span></div>
+  <div class="tile"><b>&lt; 1 min</b><span>pour qu'une session arrive</span></div>
+  <div class="tile"><b>rien</b><span>ne part d'un dossier non autorisé</span></div>
+</div>
+
+<h2>1. Chez Google, une seule fois</h2>
+<ol class="route">
+  <li><strong>Créer un projet</strong> sur <code>console.cloud.google.com</code>, nommé par exemple <code>docpin</code>, avec ton compte Google personnel.</li>
+  <li><strong>Activer l'API Google Drive</strong> : « APIs &amp; Services », puis « Library », chercher <em>Google Drive API</em>, puis « Enable ».</li>
+  <li><strong>Écran de consentement</strong> (« Google Auth Platform » ou « OAuth consent screen ») : type <em>External</em>, nom <code>docpin</code>, ton adresse comme contact. Dans les scopes, ajouter <code>…/auth/drive.appdata</code>.
+    <p>En mode <em>Testing</em>, ajoute-toi comme utilisateur de test : Google fait alors expirer l'autorisation au bout de 7 jours, et il faut recliquer « Connect ». Pour l'éviter, publie l'application (« Publish app ») ; si Google demande une vérification pour ce scope, reste en mode Testing.</p></li>
+  <li><strong>Créer le client</strong> : « Clients » (ou « Credentials »), puis « Create client », type <strong>Desktop app</strong>. Note l'<em>ID client</em> et le <em>secret</em>.
+    <p>Un client « Desktop » accepte tout retour vers <code>http://127.0.0.1</code>, quel que soit le port : rien d'autre à déclarer.</p></li>
+</ol>
+
+<h2>2. Sur chaque machine</h2>
+<ol class="route machine">
+  <li><strong>Mettre docpin en 0.4.0</strong> : <code>claude plugin update docpin@docpin</code>. Sur le mini-PC, il faut d'abord WSL, Claude Code dans WSL et le plugin, comme le dit le README.</li>
+  <li><strong>Ouvrir la page d'accueil</strong> (<code>! annotate open</code>), carte <em>Sync between machines</em>. Store : <em>Google Drive</em>. Coller l'ID client et le secret, choisir une <strong>phrase secrète</strong> (8 caractères au moins), puis « Save ».</li>
+  <li><strong>« Connect Google Drive »</strong> : la page de Google s'ouvre. Comme c'est ton application, Google affiche « Google n'a pas validé cette application » : « Paramètres avancés », puis « Accéder à docpin ». Tu reviens sur la page, « Google Drive connected ».</li>
+  <li><strong>Autoriser les dossiers</strong> dont les sessions peuvent partir, par exemple <code>~/workspace/misc</code>. Sur ce PC, <strong>jamais un dossier de projets d'employeur</strong>.</li>
+  <li><strong>Cocher « Sync on »</strong>.</li>
+</ol>
+
+<div class="table" style="margin-top:14px">
+<table>
+  <tr><th>Réglage</th><th>Ce PC</th><th>Le mini-PC</th></tr>
+  <tr><td>ID client et secret</td><td colspan="2">les mêmes : un seul client OAuth, donc un seul dossier caché partagé</td></tr>
+  <tr><td>Compte Google</td><td colspan="2">le même</td></tr>
+  <tr><td>Phrase secrète</td><td colspan="2">la même, sinon l'arrivée dit « wrong passphrase »</td></tr>
+  <tr><td>Nom de la machine</td><td>par défaut le nom du poste</td><td>par exemple <code>mini-pc</code></td></tr>
+  <tr><td>Dossiers autorisés</td><td>tes dépôts perso seulement</td><td>ceux d'où tu renverras</td></tr>
+</table>
+</div>
+
+<h2>3. Au quotidien</h2>
+<ol class="route machine">
+  <li><strong>Avant de partir</strong> : commiter et pousser. L'envoi avertit s'il reste des fichiers non commités ou des commits non poussés.</li>
+  <li><strong>« Send a session… »</strong> sur la page, ou <code>! annotate sync send</code> dans la conversation elle-même.</li>
+  <li><strong>Sur l'autre machine</strong>, en moins d'une minute, la session apparaît sous <em>Arrived here</em>. « Pull before resuming » s'affiche si son clone n'est pas au même commit. Fais le <code>git pull</code>, puis <strong>« Resume here »</strong> : un onglet reprend la conversation et lui dit où elle est maintenant.</li>
+  <li><strong>Si son clone n'est pas trouvé</strong>, la session attend : tape son dossier, « Place here ». La fois suivante, elle y retourne toute seule.</li>
+</ol>
+
+<h2>4. Ce qui est vérifié, et ce qui ne l'est pas</h2>
+<div class="table">
+<table>
+  <tr><th></th><th>Point</th><th>Comment</th></tr>
+  <tr><td class="ok">✓</td><td>une conversation copiée reprend sur l'autre machine, aller et retour</td><td>sonde du 2026-10-12, deux environnements isolés, chemins différents</td></tr>
+  <tr><td class="ok">✓</td><td>envoi, relève, dépôt dans le bon clone, trois trajets ; rien ne part d'un dossier non autorisé ; une phrase secrète fausse est signalée une seule fois</td><td>31 tests, et chaque garde cassée exprès fait tomber la suite (8 mutations)</td></tr>
+  <tr><td class="ok">✓</td><td>le stockage ne contient jamais un transcript lisible ; la page ne voit aucun secret</td><td>tests, avec témoin</td></tr>
+  <tr><td class="ok">✓</td><td>la carte en clair, en sombre et sur téléphone</td><td>captures, sans débordement ni erreur JavaScript</td></tr>
+  <tr><td class="warn">⚠</td><td><strong>le vrai Google Drive n'a jamais été appelé</strong></td><td>seulement un faux serveur qui vérifie ce que Google vérifie : PKCE, jeton, dossier caché, taille</td></tr>
+  <tr><td class="warn">⚠</td><td>Google accepte le retour sur <code>http://127.0.0.1:8765/</code></td><td>conforme à sa règle pour les clients Desktop, à constater au premier « Connect »</td></tr>
+  <tr><td class="warn">⚠</td><td>les deux machines voient le même dossier caché</td><td>c'est le rôle de ce dossier (même client, même compte), à constater au premier envoi</td></tr>
+  <tr><td class="no">✗</td><td>un essai réel entre ce PC et le mini-PC</td><td>à faire</td></tr>
+</table>
+</div>
+
+<h2>5. Décisions prises en route</h2>
+<div class="table">
+<table>
+  <tr><th>Décision</th><th>Pourquoi</th></tr>
+  <tr><td>chiffrer sur la machine, avant l'envoi</td><td>Google ne lit rien ; c'est déjà ce qu'exigerait un serveur public</td></tr>
+  <tr><td><code>openssl</code> pour chiffrer, HMAC vérifié avant de déchiffrer</td><td>Python n'a pas de chiffrement intégré, docpin reste sans dépendance ; une phrase fausse et un fichier abîmé sont refusés tous les deux, avec un message clair</td></tr>
+  <tr><td>dossier caché de l'application (<code>drive.appdata</code>)</td><td>docpin ne voit rien d'autre de ton Drive, et ton Drive ne montre pas ces fichiers</td></tr>
+  <tr><td>liste blanche des dossiers</td><td>ce PC porte des dépôts d'employeur : une liste noire oubliée une fois laisserait fuir</td></tr>
+  <tr><td>un envoi remplace les précédents</td><td>pas de concurrence, par ta décision : seule la dernière version compte</td></tr>
+  <tr><td>le clone est retrouvé par l'URL du remote</td><td>les chemins diffèrent d'une machine à l'autre, le remote non</td></tr>
+  <tr><td>« Resume here » envoie un premier message d'orientation</td><td>la conversation cite les chemins de l'autre machine</td></tr>
+  <tr><td>un dossier synchronisé par un autre programme est aussi accepté</td><td>il ne coûtait rien, puisque les tests s'en servent ; et Drive pour ordinateur ou Syncthing en fournissent un</td></tr>
+</table>
+</div>
+
+<h2>Ce qu'il te reste à faire</h2>
+<div class="card todo">
+  <ol>
+    <li>La partie Google (section 1), une fois.</li>
+    <li>Les réglages de ce PC (section 2), puis ceux du mini-PC quand il sera allumé.</li>
+    <li>Un premier envoi réel, pour lever les trois réserves ⚠ de la section 4.</li>
+  </ol>
+</div>
+</main>
+</body>
+</html>

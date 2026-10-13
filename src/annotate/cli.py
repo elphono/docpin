@@ -162,6 +162,37 @@ def cmd_resend(args: argparse.Namespace, cfg: config.Config) -> int:
     return _post(cfg, args.id, "resend")
 
 
+def cmd_sync(args: argparse.Namespace, cfg: config.Config) -> int:
+    """The sync between machines, through the daemon. `send` without an id
+    sends the session it is typed in (`! annotate sync send`)."""
+    if args.action == "send":
+        session = args.session or os.environ.get("CLAUDE_CODE_SESSION_ID", "")
+        if not session:
+            raise client.ClientError("which session? Give its id, or type `! annotate sync "
+                                     "send` inside the session itself")
+        result = client.call(cfg.port, "POST", "/api/sync/send", {"session": session},
+                             timeout=300)
+        print(result.get("message") or result)
+        return 0
+    if args.action == "poll":
+        result = client.call(cfg.port, "POST", "/api/sync/poll", timeout=300)
+        if result.get("error"):
+            raise client.ClientError(str(result["error"]))
+        print(f"{len(result.get('received') or [])} session(s) received")
+        return 0
+    data = client.call(cfg.port, "GET", "/api/sync", timeout=10)
+    settings, poll = data["settings"], data.get("last_poll") or {}
+    print(f"sync {'on' if settings['enabled'] else 'off'}, as {settings['machine_name']}, "
+          f"store {settings['store']}; last check {poll.get('at') or 'never'}"
+          + (f" (error: {poll['error']})" if poll.get("error") else ""))
+    for folder in settings["allowed"]:
+        print(f"  may leave: {folder}")
+    for item in data.get("arrivals") or []:
+        print(f"  arrived: {item['session_id'][:8]}  {item['status']:<12} "
+              f"{item.get('title') or ''}  {item.get('cwd') or item.get('error') or ''}")
+    return 0
+
+
 def cmd_forget(args: argparse.Namespace, cfg: config.Config) -> int:
     try:
         client.call(cfg.port, "DELETE",
@@ -353,6 +384,11 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("--folder", default=None, help="only this tracked folder")
     p.set_defaults(run=cmd_rescan)
 
+    p = sub.add_parser("sync", help="carry a conversation to your other machine")
+    p.add_argument("action", nargs="?", default="status", choices=("send", "poll", "status"))
+    p.add_argument("session", nargs="?", help="for send: its id (default: this session)")
+    p.set_defaults(run=cmd_sync)
+
     sub.add_parser("serve", help="run the daemon").set_defaults(run=cmd_serve)
     sub.add_parser("service", help="write the systemd user unit").set_defaults(
         run=cmd_service)
@@ -371,7 +407,7 @@ def parser() -> argparse.ArgumentParser:
 
 # The commands that need a daemon, started on demand when the plugin's
 # `bin/annotate` launched them (decision Q5). `status` reports, it never starts.
-AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session", "resend"})
+AUTOSTART = frozenset({"register", "wait", "open", "send", "new-session", "resend", "sync"})
 
 
 def _autostart(args: argparse.Namespace, cfg: config.Config) -> None:

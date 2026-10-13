@@ -31,6 +31,19 @@
     GET    /api/sessions                     the conversations a document can be attached
                                              to: open first, then most recent (claude.sessions)
     POST   /api/scan     {days}              catch up every tracked folder (scanner)
+    GET    /api/sync                         the sync settings (never a secret), what was
+                                             received and sent (sync.py)
+    POST   /api/sync     {enabled, store…}   change the settings
+    POST   /api/sync/allowed {path}          a folder whose sessions may leave this machine
+    DELETE /api/sync/allowed?path=<folder>   no longer
+    POST   /api/sync/send {session}          seal the conversation, put it in the store
+    POST   /api/sync/poll                    look for arrivals now
+    POST   /api/sync/google                  the address of Google's consent page
+    GET    /?state=…&code=…                  Google's answer (the redirect URI): no
+                                             X-Annotate, the state proves it (GoogleLogins)
+    POST   /api/sync/arrivals/<session>/resume   a terminal tab resumes it here
+    POST   /api/sync/arrivals/<session>/place {path}  put it in that folder
+    DELETE /api/sync/arrivals/<session>      forget the arrival
 
 **Local only, and no open CORS.** The socket is bound to 127.0.0.1. Any web
 page in the user's browser can still fire a "simple" cross-site POST at
@@ -59,10 +72,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import FrameType
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import (browser, claude, config, folders, htmldoc, inbox, listeners, registry,
-               runtime, scanner, sender, service)
+from . import (browser, claude, config, folders, gdrive, htmldoc, inbox, listeners,
+               registry, runtime, scanner, sender, service, sync, vault)
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -127,6 +140,7 @@ class AnnotateServer(ThreadingHTTPServer):
         self.sender = send
         self.wait_hold = WAIT_HOLD
         self.catchups = scanner.CatchUps()
+        self.google = sync.GoogleLogins()
         # A daemon running the plugin's stable copy watches the copy that
         # `current` points at: a new version makes a new copy (runtime.py).
         self.code_dir = runtime.watched(CODE_DIR)
@@ -174,6 +188,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _error(self, status: HTTPStatus, message: str) -> None:
         self._json(status, {"error": message})
+
+    def _redirect(self, location: str) -> None:
+        self.send_response(HTTPStatus.SEE_OTHER)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
 
     def _check_host(self) -> None:
         host = (self.headers.get("Host") or "").lower()
@@ -228,6 +249,16 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.CONFLICT, str(exc))
         except (folders.FoldersError, scanner.ScanError) as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
+        except sync.SyncRefused as exc:
+            self._error(HTTPStatus.FORBIDDEN, str(exc))
+        except sync.SyncError as exc:
+            self._error(HTTPStatus.CONFLICT, str(exc))
+        except gdrive.DriveError as exc:
+            log.error("%s %s: %s", method, self.path, exc)
+            self._error(HTTPStatus.BAD_GATEWAY, str(exc))
+        except vault.VaultError as exc:
+            log.error("%s %s: %s", method, self.path, exc)
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
         except (registry.RegistryError, sender.SendError, browser.OpenError,
                 htmldoc.HtmlDocError, listeners.ListenerError) as exc:
             log.error("%s %s: %s", method, self.path, exc)
@@ -251,6 +282,8 @@ class Handler(BaseHTTPRequestHandler):
     # -- routes -----------------------------------------------------------
     def _dispatch(self, method: str, parts: list[str],
                   query: dict[str, list[str]], raw_path: str) -> None:
+        if method == "GET" and not parts and "state" in query:
+            return self._google_answer(query)
         if method == "GET" and not parts:
             return self._send(HTTPStatus.OK, (STATIC / "index.html").read_bytes(),
                               "text/html; charset=utf-8")
@@ -287,6 +320,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET only")
             return self._json(HTTPStatus.OK, {"sessions": claude.sessions(),
                                               "limit": claude.SESSION_LIMIT})
+        if parts[:2] == ["api", "sync"]:
+            return self._sync(method, parts[2:], query)
         if parts == ["api", "scan"] and method == "POST":
             body = self._body()
             days = scanner.check_days(body.get("days") if isinstance(body, dict) else None)
@@ -322,6 +357,56 @@ class Handler(BaseHTTPRequestHandler):
             log.info("folder %s no longer tracked", entry["path"])
             return self._json(HTTPStatus.OK, {"removed": entry})
         raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET, POST or DELETE")
+
+    def _sync(self, method: str, rest: list[str], query: dict[str, list[str]]) -> None:
+        body: Any = self._body() if method == "POST" else None
+        body = body if isinstance(body, dict) else {}
+        if not rest:
+            if method == "GET":
+                return self._json(HTTPStatus.OK, sync.overview())
+            if method == "POST":
+                return self._json(HTTPStatus.OK, {"settings": sync.public(sync.update(body))})
+        elif rest == ["allowed"]:
+            if method == "POST":
+                return self._json(HTTPStatus.CREATED, {"allowed": sync.allow(str(body.get("path") or ""))})
+            if method == "DELETE":
+                return self._json(HTTPStatus.OK,
+                                  {"removed": sync.disallow(query.get("path", [""])[0])})
+        elif rest == ["send"] and method == "POST":
+            return self._json(HTTPStatus.OK, sync.send(str(body.get("session") or "")))
+        elif rest == ["poll"] and method == "POST":
+            return self._json(HTTPStatus.OK, sync.poll_once())
+        elif rest == ["google"] and method == "POST":
+            return self._json(HTTPStatus.OK,
+                              {"url": self.server.google.start(f"{self.server.base_url()}/")})
+        elif len(rest) >= 2 and rest[0] == "arrivals":
+            session, action = rest[1], (rest[2] if len(rest) == 3 else "")
+            if method == "DELETE" and not action:
+                sync.dismiss(session)
+                return self._json(HTTPStatus.OK, {"dismissed": session})
+            if method == "POST" and action == "resume":
+                return self._json(HTTPStatus.OK, sync.resume(session, self.server.cfg))
+            if method == "POST" and action == "place":
+                item = sync.place(session, str(body.get("path") or ""))
+                return self._json(HTTPStatus.OK, {"arrival": item, "message":
+                                                  f"Placed in {item['cwd']}: Resume here."})
+        raise Refused(HTTPStatus.NOT_FOUND, "not found")
+
+    def _google_answer(self, query: dict[str, list[str]]) -> None:
+        """Google sends the browser back here after the consent page. Its
+        outcome goes to the page in the fragment, which never reaches a server."""
+        state = query.get("state", [""])[0]
+        code = query.get("code", [""])[0]
+        refused = query.get("error", [""])[0]
+        try:
+            if refused:
+                raise sync.SyncError(f"Google says {refused}: nothing was connected")
+            self.server.google.finish(state, code)
+            outcome = "sync-connected"
+        except (sync.SyncError, gdrive.DriveError) as exc:
+            log.error("Google connection: %s", exc)
+            outcome = "sync-error=" + quote(str(exc))
+        self._redirect(f"/#{outcome}")
 
     def _read_document(self, path: Path) -> str:
         try:
@@ -485,6 +570,8 @@ def serve(cfg: Config) -> int:
     worker.start()
     scan_stop = threading.Event()
     threading.Thread(target=scanner.run, args=(scan_stop,), name="scan",
+                     daemon=True).start()
+    threading.Thread(target=sync.run, args=(scan_stop,), name="sync",
                      daemon=True).start()
     log.info("annotate daemon listening on %s", srv.base_url())
     while not _Stop.requested:

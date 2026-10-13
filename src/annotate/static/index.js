@@ -14,6 +14,10 @@
  * directory, remove one, and "Rescan", which registers what was written in
  * the last N days; adding a folder does the same for that folder.
  *
+ * For the sync between machines (decision of 2026-10-13): turn it on, the
+ * store (Google Drive, or a folder another program syncs), the passphrase, the
+ * folders allowed to leave this machine, "Send a session…" (the same picker),
+ * and what arrived here, with Resume here or the folder it goes in.
  * Everything goes through the same API as the tray, with the same guard:
  * every POST/DELETE carries `X-Annotate`, and this page's Origin is the
  * daemon's own. Data reaches the DOM through textContent only: a document
@@ -445,30 +449,37 @@
 
   // -- the session picker -----------------------------------------------------
   let pickerFor = null;
+  let pickerMode = 'attach';            // or 'send': the sync's "Send a session…"
   let pickerSessions = [];
   let pickerShown = [];
   let pickerLimit = 0;
   let pickerActive = 0;
 
-  async function openPicker(doc) {
+  async function openPicker(doc, mode) {
     closeMenus();
+    pickerMode = mode || 'attach';
     pickerFor = doc;
-    pickerDoc.textContent = (doc.title || doc.path) + (doc.session_id
-      ? ' · attached to session ' + doc.session_id.slice(0, 8) : ' · no known session');
+    $('picker-title').textContent = pickerMode === 'send' ? 'Send to the other machine'
+      : 'Attach to a session';
+    pickerDoc.textContent = pickerMode === 'send'
+      ? 'Only a session of a folder allowed to leave this machine can be sent.'
+      : (doc.title || doc.path) + (doc.session_id
+        ? ' · attached to session ' + doc.session_id.slice(0, 8) : ' · no known session');
     pickerSearch.value = '';
-    pickerDetach.hidden = !doc.session_id;
+    pickerDetach.hidden = pickerMode === 'send' || !doc.session_id;
     pickerSessions = [];
     pickerShown = [];
     pickerActive = 0;
     pickerHint.className = 'hint';
-    pickerHint.textContent = '↑ ↓ to move, Enter to attach, Esc to close';
+    pickerHint.textContent = '↑ ↓ to move, Enter to ' + (pickerMode === 'send' ? 'send' : 'attach')
+      + ', Esc to close';
     pickerList.textContent = '';
     pickerList.append(make('p', 'picker-empty', 'Reading the conversations of this machine…'));
     if (!picker.open) picker.showModal();
     pickerSearch.focus();
     try {
       const data = await call('GET', '/api/sessions');
-      if (pickerFor !== doc) return;
+      if (pickerFor !== doc || !picker.open) return;
       pickerSessions = data.sessions || [];
       pickerLimit = data.limit || 0;
       renderPicker();
@@ -544,11 +555,12 @@
 
   async function pick(session) {
     const doc = pickerFor;
-    if (busy || !doc) return;
+    if (busy || (!doc && pickerMode !== 'send')) return;
     busy = true;
     try {
-      const answer = await call('POST', '/api/docs/' + encodeURIComponent(doc.id) + '/session',
-                                { session });
+      const answer = pickerMode === 'send'
+        ? await call('POST', '/api/sync/send', { session })
+        : await call('POST', '/api/docs/' + encodeURIComponent(doc.id) + '/session', { session });
       picker.close();
       say(answer.message, false);
     } catch (err) {
@@ -624,11 +636,188 @@
     }
   }
 
+  // -- sync between machines ----------------------------------------------------
+  const syncBox = $('sync');
+  const syncStatus = $('sync-status');
+  const syncEnabled = $('sync-enabled');
+  const syncForm = $('sync-form');
+  const syncStore = $('sync-store');
+  const syncAllowed = $('sync-allowed');
+  const syncArrivals = $('sync-arrivals');
+  let shownSync = '';
+  let shownSyncForm = '';
+  let shownArrivals = '';
+  let syncData = null;
+
+  const when = (iso) => (iso ? ago(Date.parse(iso) / 1000) : '');
+
+  function showStore() {
+    $('sync-gdrive').hidden = syncStore.value !== 'gdrive';
+    $('sync-folder-box').hidden = syncStore.value !== 'folder';
+  }
+  syncStore.addEventListener('change', showStore);
+
+  function renderSync(data) {
+    syncData = data;
+    if (!data) {
+      syncBox.hidden = true;            // a daemon older than this page
+      return;
+    }
+    syncBox.hidden = false;
+    const settings = data.settings;
+    const poll = data.last_poll || {};
+    syncStatus.className = poll.error && settings.enabled ? 'error' : '';
+    syncStatus.textContent = !settings.enabled ? 'Off: nothing leaves this machine, nothing arrives.'
+      : poll.error ? 'Last check failed: ' + poll.error
+        : 'On, as ' + settings.machine_name + (poll.at ? ' · checked ' + when(poll.at) : '')
+          + ' · every ' + Math.round(data.poll_every) + ' s';
+    if (document.activeElement !== syncEnabled) syncEnabled.checked = Boolean(settings.enabled);
+    // The fields are refilled only when the settings changed and nobody types in them.
+    const formKey = JSON.stringify([settings.machine_name, settings.store, settings.client_id,
+                                    settings.folder]);
+    if (formKey !== shownSyncForm && !syncForm.contains(document.activeElement)) {
+      shownSyncForm = formKey;
+      $('sync-name').value = settings.machine_name || '';
+      syncStore.value = settings.store;
+      $('sync-client-id').value = settings.client_id || '';
+      $('sync-folder').value = settings.folder || '';
+      showStore();
+    }
+    $('sync-client-secret').placeholder = settings.client_secret_set ? 'set (type to replace)' : 'not set';
+    $('sync-pass').placeholder = settings.passphrase_set ? 'set (type to replace)' : 'not set, 8 characters at least';
+    const connected = $('sync-connected');
+    connected.className = settings.google_connected ? 'badge live' : 'badge';
+    connected.textContent = settings.google_connected ? 'connected' : 'not connected';
+    $('sync-send').disabled = !settings.enabled;
+    $('sync-poll').disabled = !settings.enabled;
+
+    const allowedKey = JSON.stringify(settings.allowed);
+    if (allowedKey !== shownSync) {
+      shownSync = allowedKey;
+      syncAllowed.textContent = '';
+      if (!settings.allowed.length) {
+        syncAllowed.append(make('p', 'meta', 'None: no session can be sent from this machine.'));
+      }
+      for (const folder of settings.allowed) {
+        const row = make('div', 'tracked');
+        row.append(make('code', '', tilde(folder)), make('span', 'rule', 'its sessions may be sent'),
+          button('Remove', 'ghost', 'Its sessions may no longer leave this machine', async () => {
+            await call('DELETE', '/api/sync/allowed?path=' + encodeURIComponent(folder));
+            return 'Sessions of ' + tilde(folder) + ' no longer leave this machine.';
+          }));
+        syncAllowed.append(row);
+      }
+    }
+    if (busy) return;
+    const arrivalsKey = JSON.stringify([data.arrivals, Math.floor(Date.now() / 60000)]);
+    if (arrivalsKey === shownArrivals || syncArrivals.contains(document.activeElement)) return;
+    shownArrivals = arrivalsKey;
+    syncArrivals.textContent = '';
+    if (!data.arrivals.length) {
+      syncArrivals.append(make('p', 'meta', 'Nothing yet. What your other machine sends appears here.'));
+    }
+    for (const item of [...data.arrivals].reverse()) syncArrivals.append(arrivalRow(item));
+  }
+
+  function arrivalRow(item) {
+    const row = make('div', 'arrival');
+    row.dataset.session = item.session_id;
+    const line = make('div', 'doc-line');
+    line.append(make('span', 'name', item.title || 'Session ' + item.session_id.slice(0, 8)));
+    const badges = { ready: ['badge live', 'ready'], 'needs-folder': ['badge accent', 'choose its folder'],
+                     error: ['badge danger', 'cannot be opened'] };
+    const [cls, text] = badges[item.status] || ['badge', item.status];
+    line.append(make('span', cls, text));
+    const sub = make('div', 'sub');
+    sub.append((item.from ? 'from ' + item.from + ' · ' : '') + 'received ' + when(item.received_at));
+    if (item.cwd) sub.append(' · ', make('span', 'mono', tilde(item.cwd)));
+    else if (item.remote) sub.append(' · no clone of ', make('span', 'mono', item.remote), ' found');
+    row.append(line, sub);
+    if (item.error) row.append(make('div', 'problem', item.error));
+    if (item.warnings && item.warnings.length) {
+      const list = make('ul');
+      for (const warning of item.warnings) list.append(make('li', '', warning));
+      row.append(list);
+    }
+    const api = '/api/sync/arrivals/' + encodeURIComponent(item.session_id);
+    const actions = make('div', 'row');
+    if (item.status === 'ready') {
+      actions.append(button('Resume here', 'primary', 'A terminal tab resumes the conversation here',
+        async () => (await call('POST', api + '/resume')).message));
+    }
+    if (item.status !== 'error') {
+      const input = make('input');
+      input.setAttribute('list', 'folder-suggest');
+      input.placeholder = item.cwd ? 'another folder' : '~/where/its/clone/is';
+      input.setAttribute('aria-label', 'Folder the conversation goes in');
+      actions.append(input, button(item.cwd ? 'Move' : 'Place here', '',
+        'Put the conversation in this folder', async () =>
+          (await call('POST', api + '/place', { path: input.value })).message));
+    }
+    actions.append(button('Dismiss', 'ghost', 'Forget this arrival (the conversation stays where it is)',
+      async () => { await call('DELETE', api); return 'Dismissed.'; }));
+    row.append(actions);
+    return row;
+  }
+
+  syncEnabled.addEventListener('change', () => act(syncEnabled, async () => {
+    try {
+      await call('POST', '/api/sync', { enabled: syncEnabled.checked });
+    } catch (err) {
+      syncEnabled.checked = !syncEnabled.checked;
+      throw err;
+    }
+    return syncEnabled.checked ? 'Sync on: this machine checks the store every minute.'
+      : 'Sync off.';
+  }));
+  syncForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    act($('sync-save'), async () => {
+      const changes = { machine_name: $('sync-name').value, store: syncStore.value,
+                        client_id: $('sync-client-id').value, folder: $('sync-folder').value,
+                        client_secret: $('sync-client-secret').value, passphrase: $('sync-pass').value };
+      await call('POST', '/api/sync', changes);
+      $('sync-client-secret').value = '';
+      $('sync-pass').value = '';
+      shownSyncForm = '';
+      return 'Sync settings saved.';
+    });
+  });
+  $('sync-connect').addEventListener('click', (e) => act(e.currentTarget, async () => {
+    const answer = await call('POST', '/api/sync/google');
+    window.location.assign(answer.url);
+    return 'Opening Google\'s consent page…';
+  }));
+  $('sync-allow').addEventListener('submit', (e) => {
+    e.preventDefault();
+    act($('sync-allow-add'), async () => {
+      const answer = await call('POST', '/api/sync/allowed', { path: $('sync-allow-input').value });
+      $('sync-allow-input').value = '';
+      return 'Sessions of ' + tilde(answer.allowed) + ' may now be sent.';
+    });
+  });
+  $('sync-send').addEventListener('click', () => openPicker(null, 'send'));
+  $('sync-poll').addEventListener('click', (e) => act(e.currentTarget, async () => {
+    const answer = await call('POST', '/api/sync/poll');
+    if (answer.error) throw new Error(answer.error);
+    return answer.received && answer.received.length
+      ? plural(answer.received.length, 'session') + ' received.' : 'Nothing new.';
+  }));
+
+  // Google's consent page sends the browser back with its outcome in the fragment.
+  if (location.hash.startsWith('#sync-')) {
+    const outcome = location.hash.slice(1);
+    history.replaceState(null, '', location.pathname);
+    if (outcome === 'sync-connected') say('Google Drive connected: turn sync on.', false);
+    else say(decodeURIComponent(outcome.replace(/^sync-error=/, '')), true);
+  }
+
   async function refresh() {
     try {
-      const [docs, tracked] = await Promise.all([call('GET', '/api/docs'),
-                                                call('GET', '/api/folders')]);
+      const [docs, tracked, synced] = await Promise.all([call('GET', '/api/docs'),
+        call('GET', '/api/folders'), call('GET', '/api/sync').catch(() => null)]);
       renderFolders(tracked);
+      renderSync(synced);
       render(docs);
     } catch (err) {
       daemonLine.className = 'down';

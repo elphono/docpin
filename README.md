@@ -107,6 +107,22 @@ Type them in a Claude Code session:
 | the list of your documents | `! annotate open`, or open `http://127.0.0.1:8765/` |
 | an icon in the Windows notification area | `! annotate tray --start` |
 
+### Optional: carry a conversation to your other machine
+
+Start a conversation on one computer, pick it up on another, where you left it. Off by default, set up
+once per machine in the **Sync between machines** panel of the home page:
+
+1. **Where it travels**: your Google Drive (a hidden folder only docpin sees; you create a free OAuth
+   client once, the panel says how) or a folder another program already syncs.
+2. **A passphrase**, the same on both machines. What travels is encrypted with it before it leaves:
+   Google never reads your conversations.
+3. **The folders whose conversations may leave this machine.** Nothing else can be sent.
+
+Then **Send a session…** on the home page, or `! annotate sync send` inside the conversation. Within a
+minute the other machine lists it under *Arrived here*; **Resume here** opens it in its own clone of the
+repository. The code travels by git as usual: the panel warns about what is not committed or pushed.
+Both machines should run the same Claude Code version.
+
 ## Every day
 
 - Ask a session for a document (a spec, a report, a plan to review). It gives you the link.
@@ -160,7 +176,9 @@ The daemon listens on `127.0.0.1` only, and `send` starts a session that is allo
 web page you merely visit must not be able to trigger it: every request that changes anything needs the
 custom `X-Annotate` header (which forces a CORS preflight the daemon never grants), a local `Origin`,
 and a `Host` that names localhost (DNS rebinding). `/docs/<id>/files/` serves nothing outside the
-document's folder, symbolic links included.
+document's folder, symbolic links included. A conversation sent to your other machine is compressed and
+encrypted on this one (AES-256 through `openssl`, with an HMAC checked before anything is decrypted),
+only from the folders you allowed; the passphrase and Google's token stay in a file only you can read.
 
 ## Develop
 

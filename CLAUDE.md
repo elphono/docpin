@@ -107,6 +107,18 @@ système ; le démon d'une copie devient `stale` quand `current` change. Il dém
 `status`. **Chaque changement publié change la version** (`pyproject.toml`, `__init__.py`, les deux
 `plugin.json`, égales par test) : une version épinglée identique n'atteint pas les installés.
 
+**Une conversation peut passer sur l'autre machine de l'utilisateur** (2026-10-13, `sync.py`, guide
+`docs/2026-10-13-synchro-entre-machines.html`). « Send » scelle le transcript (`vault.py` : gzip, puis
+`openssl enc -aes-256-cbc -pbkdf2`, puis un HMAC vérifié avant tout déchiffrement) et le dépose dans le
+dossier caché de l'application sur Google Drive (`gdrive.py`, portée `drive.appdata`, client OAuth de
+l'utilisateur, retour du consentement sur `/` du démon, avec PKCE et un `state` à usage unique), ou dans
+un dossier qu'un autre programme synchronise. Le démon de l'autre machine regarde toutes les 60 s, dépose
+la conversation là où `claude --resume` la trouve (`~/.claude/projects/<chemin où tout caractère
+non alphanumérique devient un tiret>/`), dans SON clone du même dépôt, retrouvé par l'URL du remote, et propose « Resume here ». Désactivée
+par défaut ; **seuls les dossiers autorisés peuvent envoyer** (liste blanche : ce poste porte aussi des
+dépôts d'employeur). **Pas de concurrence à gérer**, décision du 2026-10-13 : une session n'est jamais
+envoyée pendant qu'on la modifie de l'autre côté, et un envoi plus récent remplace l'ancien.
+
 L'étude qui a fixé ces choix, avec ce qui est repris de remarkable-sync et la phase 2, est
 `docs/etude-reutilisation.html`.
 
@@ -135,6 +147,7 @@ uv run annotate serve                    # le démon, au premier plan
 uv run annotate service                  # écrit ~/.config/systemd/user/annotate.service
 uv run annotate tray [--start|--once|--uninstall]   # pastille Windows + raccourci Démarrage
 uv run annotate status                   # le démon en une ligne
+uv run annotate sync [send [<session>]|poll|status]   # la synchro entre machines (send : la session courante)
 ```
 
 Configuration : `~/.config/annotate/config.toml` (`port`, `claude_bin`), surchargeable par
@@ -197,6 +210,8 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | le démarrage à la demande ne vise que les commandes qui en ont besoin, et ne lance jamais un second démon | `test_the_launcher_starts_the_daemon_only_for_commands_that_need_it`, `test_a_running_daemon_is_never_started_twice` |
 | les manifestes portent la version du paquet ; Claude Code valide la marketplace sans autre avertissement que ce `CLAUDE.md` | `test_every_manifest_carries_the_package_version`, job `plugin` de la CI |
 | le contrôle de visual-first bloque un livrable Markdown et un HTML sans visuel (un Mermaid n'en est pas un), avertit au-delà de 4 paragraphes par visuel et sur une ressource réseau, et demande à docpin, par sa copie stable, ce qu'est un document | `tests/test_visual_first.py` |
+| la synchro : rien ne part d'un dossier non autorisé ; une machine ne reçoit jamais son propre envoi ; un fichier illisible (phrase secrète fausse, abîmé) est signalé une fois et jamais retéléchargé, un stockage injoignable est réessayé ; un envoi remplace les anciens ; la page ne voit aucun secret et le fichier de réglages est en 0600 ; le stockage ne contient jamais un transcript lisible | `tests/test_sync.py` |
+| la conversation reçue va dans le clone de CETTE machine : là où l'utilisateur l'a déjà déposée, sinon un dépôt où une conversation locale a tourné (jamais un transcript reçu, dont le dossier est celui de l'autre machine), sinon le workspace | `test_a_received_transcript_is_no_evidence_of_where_a_clone_lives`, `test_a_conversation_without_a_known_clone_waits_for_its_folder` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 
@@ -288,6 +303,11 @@ copie du dépôt et exige que la suite tombe.
   résout le lien, si bien qu'un chemin passé par `current` devient la copie datée. La 0.3.4 avait ce
   défaut, invisible au test parce que le double de `windows_path` ne résolvait rien. Le raccourci
   Démarrage vise donc `runtime/tray.ps1`, un fichier simple que chaque installation rafraîchit.
+- **Un transcript reçu commence dans le dossier de l'AUTRE machine** (2026-10-13, attrapé par le test de
+  l'aller-retour à trois trajets). `claude.cwd_of` lit le premier `cwd` : pour une session venue d'ailleurs,
+  c'est un chemin de l'autre poste, qui peut exister ici (même nom d'utilisateur, même arborescence) et
+  désigner un autre clone ou rien du tout. La recherche du clone écarte donc les sessions reçues, et passe
+  d'abord par l'endroit où l'utilisateur a déjà déposé la session.
 - **Le home n'est jamais parcouru** : mesuré le 2026-10-12, un passage sur le home d'un poste de
   développeur prend 33,6 s, contre 0,3 s pour le workspace, et le démon passe toutes les 30 s. Sans
   workspace, le dossier par défaut est donc le home en `scan: false` : le hook y prend les `docs/`,

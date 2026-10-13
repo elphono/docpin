@@ -4,6 +4,16 @@ What is shipped, what is next, and what is deliberately not on the list. Items m
 done)** have a written design in [docs/etude-reutilisation.html](docs/etude-reutilisation.html);
 items marked **(proposal)** are ideas, not commitments.
 
+## Shipped — v0.4
+
+- **Carry a conversation to your other machine** (`sync.py`): **Send** seals the transcript on this
+  machine (compressed, AES-256 through `openssl`, HMAC-checked) and puts it in your Google Drive's hidden
+  application folder, or in a folder another program syncs; the other machine's daemon looks every
+  minute, puts the conversation where `claude --resume` finds it, in its own clone of the same
+  repository (found by its remote), and offers **Resume here**. Off by default; only the folders you
+  allow may send. The route was measured first, on 2026-10-12: a transcript copied into the other
+  machine's project folder resumes there intact, works in the new folder, and the trip back works.
+
 ## Shipped — v0.3
 
 - **A Claude Code plugin, and its own marketplace**: `/plugin install docpin --marketplace
@@ -43,25 +53,11 @@ items marked **(proposal)** are ideas, not commitments.
 
 ## Next
 
-1. **Carry a session to another machine** **(proposal, priority)**. Pick a conversation up on a
-   second computer, in the same state, through a server of your own (a public one later, if there is
-   an audience). First version: **Send** pushes the session's transcript (and docpin's state for its
-   documents) to the server; the other machine's daemon polls it and drops the transcript where
-   `claude --resume <id>` finds it. The code travels by git, as it does today. No concurrency to
-   handle: a session is never sent while it is being changed on the other side.
-   - **Measured on 2026-10-12** (two isolated homes, the project at a different path on each): the
-     transcript, copied into the other machine's project folder (its path with every
-     non-alphanumeric character turned into `-`), resumes there; the conversation is intact, the
-     session works in the new folder and never touches the old path, and the round trip back works.
-     Claude Code does not document this for the CLI, and the format is internal: keep both machines
-     on the same version.
-   - Nothing native covers it: Remote Control keeps the session on the first machine, and teleport
-     only pulls cloud sessions.
-   - What does not travel: background commands (an `annotate wait` is started again), uncommitted
-     files.
-   - **Before a server sees anything**: a filter that refuses the sessions of repositories that must
-     not leave a machine, and, for a public server, end-to-end encryption, so the server only holds
-     bytes it cannot read.
+1. **Carry a session in the same state** **(proposal, priority)**. v0.4 carries the conversation;
+   what still stays behind is what runs (an `annotate wait`, a dev server), the uncommitted files, and
+   docpin's own state for the session's documents (notes, references). Next: send the documents' state
+   with the conversation, and offer to commit and push before sending. A public server, if there is an
+   audience, keeps the same sealed format: the server only holds bytes it cannot read.
 2. **First real run from Windows Chrome / Edge.** Alt+click has only been measured in headless
    Chromium on Linux, and Alt alone can give the focus to the browser menu on Windows. The tray icon
    and its menu have not been looked at on a screen either. Fix whatever this shows.
