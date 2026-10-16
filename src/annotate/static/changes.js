@@ -8,7 +8,8 @@
  * removed markers and old text live in the overlay layer, like the pins.
  *
  * Nothing is drawn when nothing changed (the witness), and nothing folds when
- * a change could not be found in the page: folding could hide it.
+ * a change could not be found in the page: folding could hide it. A block
+ * inside a new block is not drawn: the topmost new block carries the mark.
  */
 (() => {
   'use strict';
@@ -81,13 +82,29 @@
     }));
     if (!result.tooMany && !items.length) return null;
     const located = items.filter((i) => i.target);
+    // A block inside a NEW block says nothing more than its ancestor: all it
+    // holds is new to the reader. It gets no mark of its own (no class, tag,
+    // step or row), the topmost new block carries the one mark. Under a
+    // CHANGED block, a new or changed block keeps its mark: that is more news.
+    const fresh = new Set(located.filter((i) => i.kind === 'new').map((i) => i.target));
+    const underNew = (node) => {
+      for (let up = node.parentElement; up; up = up.parentElement) {
+        if (fresh.has(up)) return true;
+      }
+      return false;
+    };
+    const absorbed = new Set(located.filter((i) => i.kind !== 'removed' && underNew(i.target)));
+    const drawn = located.filter((i) => !absorbed.has(i));
+    const counted = items.filter((i) => !absorbed.has(i));
+    // Every block that changed, drawn or absorbed: none of them is dimmed.
     const marked = new Set();
     for (const item of located) {
       if (item.kind === 'removed') continue;
-      item.target.classList.add(item.kind === 'new' ? 'annotate-new' : 'annotate-changed');
       marked.add(item.target);
+      if (absorbed.has(item)) continue;
+      item.target.classList.add(item.kind === 'new' ? 'annotate-new' : 'annotate-changed');
     }
-    highlight(located);
+    highlight(drawn);
 
     let sections = [];
     const level = foldLevel();
@@ -133,6 +150,7 @@
 
     // Overlay layer: a tag per marked block, a marker per removed passage.
     const tags = [];
+    const tagWidth = {};          // per kind: NEW and CHANGED tags never change size
     let open = null;
     const oldBox = make('div', 'chg-old');
     oldBox.hidden = true;
@@ -144,7 +162,7 @@
       view.layout(layer.getBoundingClientRect());
     };
     const hideOld = () => { oldBox.hidden = true; open = null; };
-    for (const item of located) {
+    for (const item of drawn) {
       const el = item.kind === 'removed'
         ? make('button', 'chg-removed', '− removed · view')
         : make('span', 'chg-tag ' + item.kind, item.kind === 'new' ? 'NEW' : 'CHANGED');
@@ -165,7 +183,7 @@
     };
     const go = (i) => {
       index = i;
-      const item = located[i];
+      const item = drawn[i];
       reveal(item.target);
       opts.changed();
       item.target.scrollIntoView({ block: 'center' });
@@ -173,17 +191,18 @@
       setTimeout(() => flash(null), 1200);
     };
     const view = {
-      items: located,
-      total: items.length,
+      items: drawn,
+      total: counted.length,
       hidden: (node) => Boolean(node && node.closest && node.closest('.annotate-folded')),
       reveal,
       showAll() {
         sections.forEach(unfold);
         document.querySelectorAll('.annotate-dim').forEach((n) => n.classList.remove('annotate-dim'));
       },
-      next() { if (located.length) go((index + 1) % located.length); },
-      prev() { if (located.length) go((index - 1 + located.length) % located.length); },
+      next() { if (drawn.length) go((index + 1) % drawn.length); },
+      prev() { if (drawn.length) go((index - 1 + drawn.length) % drawn.length); },
       layout(origin) {
+        const placed = [];
         for (const { item, el } of tags) {
           const box = item.target.getBoundingClientRect();
           const visible = (box.width || box.height) && !view.hidden(item.target);
@@ -194,10 +213,33 @@
             const y = item.change.place === 'after' ? box.bottom + 2 : box.top - 20;
             el.style.left = (box.left - origin.left) + 'px';
             el.style.top = (y - origin.top) + 'px';
-          } else {
-            el.style.left = (box.left - origin.left + 6) + 'px';
-            el.style.top = (box.top - origin.top - 17) + 'px';
+            continue;
           }
+          // Above the block, lowered into its top border and padding when it
+          // has some: never on the block's own text, less on the one above.
+          // Past a rounded corner, on the straight part of a wide block's edge.
+          const style = getComputedStyle(item.target);
+          const room = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.paddingTop) || 0);
+          const corner = parseFloat(style.borderTopLeftRadius) || 0;
+          let x = box.left - origin.left + (box.width > 4 * corner ? Math.max(6, Math.min(corner, 24)) : 6);
+          const y = box.top - origin.top - 17 + Math.min(16, Math.max(0, room - 1));
+          // Never on a tag placed just before (a dot beside its title, a first
+          // child at its parent's tab): slide right past it.
+          if (!tagWidth[item.kind]) tagWidth[item.kind] = el.offsetWidth;
+          const w = tagWidth[item.kind];
+          const near = placed.slice(-8);
+          for (let moved = true; moved;) {
+            moved = false;
+            for (const p of near) {
+              if (x < p.x + p.w + 2 && p.x < x + w + 2 && Math.abs(y - p.y) < 17) {
+                x = p.x + p.w + 4;
+                moved = true;
+              }
+            }
+          }
+          placed.push({ x, y, w });
+          el.style.left = x + 'px';
+          el.style.top = y + 'px';
         }
         if (open) {
           const a = open.anchor.getBoundingClientRect();
@@ -216,7 +258,7 @@
         const counts = make('div', 'chg-counts');
         for (const [kind, label] of [['new', 'new'], ['changed', 'changed'], ['removed', 'removed']]) {
           const cell = make('div', kind);
-          cell.append(make('b', '', String(items.filter((i) => i.kind === kind).length)), label);
+          cell.append(make('b', '', String(counted.filter((i) => i.kind === kind).length)), label);
           counts.append(cell);
         }
         box.append(counts);
@@ -229,17 +271,21 @@
         const down = make('button', '', '▼');
         up.addEventListener('click', () => view.prev());
         down.addEventListener('click', () => view.next());
-        navBar.append(up, make('span', '', (index < 0 ? '–' : index + 1) + ' / ' + located.length), down);
+        navBar.append(up, make('span', '', (index < 0 ? '–' : index + 1) + ' / ' + drawn.length), down);
         box.append(navBar);
         const list = make('ul', 'chg-list');
-        located.slice(0, LIST_MAX).forEach((item, i) => {
+        drawn.slice(0, LIST_MAX).forEach((item, i) => {
           const row = make('li', i === index ? 'cur' : '');
           const where = item.section ? cut(item.section.heading.textContent.trim(), 18) + ' · ' : '';
-          row.append(make('i', 'dot ' + item.kind), make('span', '', where + cut(item.text, 44)));
+          // A new block that holds absorbed ones reads by all its text, not its
+          // own (a card's own text is its number). A removed row keeps its text.
+          const holds = item.kind === 'new' && [...absorbed].some((a) => item.target.contains(a.target));
+          const text = holds ? item.target.innerText.replace(/\s+/g, ' ').trim() : item.text;
+          row.append(make('i', 'dot ' + item.kind), make('span', '', where + cut(text, 44)));
           row.addEventListener('click', () => go(i));
           list.append(row);
         });
-        if (located.length > LIST_MAX) list.append(make('li', 'more', '+' + (located.length - LIST_MAX) + ' more'));
+        if (drawn.length > LIST_MAX) list.append(make('li', 'more', '+' + (drawn.length - LIST_MAX) + ' more'));
         box.append(list);
         const actions = make('div', 'chg-actions');
         const all = make('button', '', 'Show everything');

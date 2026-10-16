@@ -194,6 +194,73 @@ CHANGES_B = CHANGES_A.replace(
     "<p>A fourth option keeps the old format read only for a month.</p>"
     "<p>The migration takes two days, measured on the test copy.</p>")
 
+# Blocks inside blocks (2026-10-14: "ugly and too busy"). Cards laid out like
+# the document of that day: padded, rounded, in a grid, light and dark.
+NESTED_STYLE = (
+    "<style>:root{--paper:#fff;--ink:#1f2937;--card:#f8fafc;--line:#d8dee6;--muted:#5b6472}"
+    "@media (prefers-color-scheme: dark){:root{--paper:#0f1115;--ink:#e5e7eb;"
+    "--card:#1b1f27;--line:#2c3340;--muted:#9ca3af}}"
+    "body{margin:0;background:var(--paper);color:var(--ink);"
+    "font:17px/1.5 system-ui,sans-serif}"
+    "main{max-width:1100px;margin:0 auto;padding:24px 16px 64px}"
+    "h2{font-size:22px;margin:40px 0 12px}"
+    ".grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}"
+    ".card,.box{background:var(--card);border:1px solid var(--line);border-radius:16px;"
+    "padding:14px 16px 16px}"
+    ".card header{display:flex;align-items:center;gap:10px}.card h3{margin:0;font-size:19px}"
+    ".num{flex:none;width:34px;height:34px;border-radius:50%;background:#0e7490;color:#fff;"
+    "font-weight:700;display:grid;place-items:center}.dot{width:28px;height:28px}"
+    ".card p{margin:6px 0 0}.card p+p{font-size:14.5px;color:var(--muted)}</style>")
+NESTED_A = (
+    NESTED_STYLE + "<main><h1>Nested check</h1><p>An intro paragraph that stays.</p>"
+    "<h2>Context</h2><p>Context paragraph one.</p><p>Context paragraph two.</p>"
+    "<h2>What stays manual</h2><p>Manual step one.</p><p>Manual step two.</p></main>")
+# A whole new section: a new h2, then three new cards, each a block of its own
+# (the number is its own text) holding a new h3 and two new paragraphs.
+CARD = ("<div class='card'><header><span class='num'>{0}</span><h3>{1}</h3></header>"
+        "<p>{2}</p><p>{3}</p></div>")
+NESTED_B = NESTED_A.replace("<h2>What stays manual</h2>", (
+    "<h2>Planned improvements</h2><div class='grid'>"
+    + CARD.format(1, "Offline reading", "Pages stay readable without a network.",
+                  "Not done: the cache is filled by hand today.")
+    + CARD.format(2, "Shared highlights", "Two readers see each other's marks.",
+                  "Later: compare the marks of two readers side by side.")
+    + CARD.format(3, "Print layout", "A page that prints the way it reads.",
+                  "Still planned for the first version, nothing started yet.")
+    + "</div><h2>What stays manual</h2>"))
+# Under a CHANGED block, a new or changed block is news of its own; under a NEW
+# block, a changed one is not. The Owner card's title is its first child: its
+# tag and the card's meet at the top edge.
+MIXED_A = (
+    NESTED_STYLE + "<main><h1>Mixed check</h1><p>An intro paragraph that stays.</p>"
+    "<h2>Status</h2><div class='box'>Status: draft for review"
+    "<p>The plan holds for the quarter.</p></div>"
+    "<h2>Owner</h2><div class='box'><h3>Budget: ten units per week</h3>"
+    "Owner: team alpha, since May</div>"
+    "<h2>Scope</h2><div class='box'><p>Scope covers the north and south sites.</p></div>"
+    "<h2>Notes</h2><p>Notes stay as they were.</p></main>")
+MIXED_B = (MIXED_A
+           .replace("Status: draft for review<p>The plan holds for the quarter.</p>",
+                    "Status: final for review<p>The plan holds for the quarter.</p>"
+                    "<p>A paragraph added inside a changed block.</p>")
+           .replace("<h3>Budget: ten units per week</h3>Owner: team alpha, since May",
+                    "<h3>Budget: twelve units per week</h3>Owner: team beta, since May")
+           .replace("<div class='box'><p>Scope covers the north and south sites.</p>",
+                    "<div class='box'>Extended this week"
+                    "<p>Scope covers the north and west sites.</p>"))
+# The same cards built of SIBLING blocks in a card that is no block (an
+# <article>): a round numbered dot next to the title, two paragraphs under.
+# Checked for where the tags go only (none on another).
+SIBLING_CARD = ("<article class='card'><header><div class='num dot'>{0}</div>"
+                "<h3>{1}</h3></header><p>{2}</p><p>{3}</p></article>")
+SIBLINGS_B = NESTED_A.replace("<h2>What stays manual</h2>", (
+    "<h2>Planned improvements</h2><div class='grid'>"
+    + SIBLING_CARD.format(1, "Offline reading, without a network", "Pages stay readable.",
+                          "Not done: the cache is filled by hand today.")
+    + SIBLING_CARD.format(2, "Shared highlights", "Two readers see each other's marks.",
+                          "Later: compare the marks of two readers side by side.")
+    + "</div><h2>What stays manual</h2>"))
+
 
 @pytest.mark.browser
 def test_changes_in_a_real_browser(tmp_path, make_doc):
@@ -216,12 +283,22 @@ def test_changes_in_a_real_browser(tmp_path, make_doc):
         "quote": "A paragraph with an unsent note.", "note": "Still to send",
         "offset_x": 4, "offset_y": 4}])
     path.write_text(path.read_text().replace(CHANGES_A, CHANGES_B))
+    nested_ids = []
+    for name, before, after in (("nested.html", NESTED_A, NESTED_B),
+                                ("mixed.html", MIXED_A, MIXED_B),
+                                ("siblings.html", NESTED_A, SIBLINGS_B)):
+        assert after != before
+        other = make_doc(before, name=name, title=name)
+        other_id = registry.register(other, session="sess-browser")["id"]
+        assert registry.take_baseline(other_id, registry.now_iso()) == ""
+        other.write_text(other.read_text().replace(before, after))
+        nested_ids.append(other_id)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     out = Path(os.environ.get("ANNOTATE_BROWSER_OUT", tmp_path))
     out.mkdir(parents=True, exist_ok=True)
     try:
         done = subprocess.run([node, str(CHANGES_SCRIPT), pw_dir, f"http://localhost:{srv.port}",
-                               doc_id, str(out), str(path)],
+                               doc_id, str(out), str(path), *nested_ids],
                               capture_output=True, text=True, timeout=180)
     finally:
         srv.shutdown()

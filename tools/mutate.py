@@ -248,8 +248,8 @@ MUTATIONS = (
              "the picker filters on the start of a session id",
              browser=True),
     Mutation("picker-attaches-nothing", "src/annotate/static/index.js",
-             "                                { session });",
-             "                                { session: '' });",
+             "'/session', { session });",
+             "'/session', { session: '' });",
              "choosing a session in the picker attaches the document to it",
              browser=True),
     Mutation("baseline-not-taken", "src/annotate/sender.py",
@@ -280,6 +280,23 @@ MUTATIONS = (
              "    if (!result.tooMany && !items.length) return null;\n",
              "",
              "nothing is drawn when nothing changed", browser=True),
+    Mutation("nested-marks-return", "src/annotate/static/changes.js",
+             "        if (fresh.has(up)) return true;\n",
+             "",
+             "a block inside a new block gets no mark of its own", browser=True),
+    Mutation("absorbed-dimmed", "src/annotate/static/changes.js",
+             "      marked.add(item.target);\n      if (absorbed.has(item)) continue;\n",
+             "      if (absorbed.has(item)) continue;\n      marked.add(item.target);\n",
+             "a block absorbed by a new one is never dimmed", browser=True),
+    Mutation("tag-above-padding", "src/annotate/static/changes.js",
+             " - 17 + Math.min(16, Math.max(0, room - 1));\n",
+             " - 17;\n",
+             "a padded block's tag is a tab on its top edge, not on the block above",
+             browser=True),
+    Mutation("tags-collide", "src/annotate/static/changes.js",
+             "          const near = placed.slice(-8);\n",
+             "          const near = [];\n",
+             "a tag slides past the one placed just before, never on it", browser=True),
     Mutation("home-walked", "src/annotate/folders.py",
              '    paths = sorted({Path(i["path"]) for i in items if i.get("scan") is not False},\n',
              '    paths = sorted({Path(i["path"]) for i in items},\n',
@@ -379,6 +396,17 @@ MUTATIONS = (
 )
 
 
+def stale_anchors(root: Path = ROOT) -> dict[str, int]:
+    """The mutations whose anchor is not found exactly once under `root`.
+
+    Checked before the campaign starts, and by tests/test_mutate.py in the
+    default suite: applied one by one, a stale anchor would stop the campaign
+    only when its turn came, an hour of runs later (2026-10-14).
+    """
+    counts = {m.name: (root / m.path).read_text(encoding="utf-8").count(m.old) for m in MUTATIONS}
+    return {name: n for name, n in counts.items() if n != 1}
+
+
 def copy_repo(target: Path) -> None:
     ignore = shutil.ignore_patterns(".git", ".venv", "__pycache__", ".pytest_cache",
                                     ".mypy_cache", ".ruff_cache")
@@ -387,7 +415,10 @@ def copy_repo(target: Path) -> None:
 
 def run_suite(copy: Path, browser: bool) -> tuple[str, str]:
     """Run the suite in `copy`; return (verdict, last line)."""
-    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider"]
+    # The anchor test fails on ANY mutated copy (its anchor is gone): it would
+    # kill every mutation without testing anything.
+    argv = [sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+            "--ignore=tests/test_mutate.py"]
     if browser:
         argv += ["-m", "browser"]
     try:
@@ -420,6 +451,10 @@ def main(argv: list[str] | None = None) -> int:
     chosen = [m for m in MUTATIONS if not args.names or m.name in args.names]
     if not chosen:
         print(f"no mutation named {args.names}; known: {[m.name for m in MUTATIONS]}")
+        return 2
+    stale = {name: n for name, n in stale_anchors().items() if name in {m.name for m in chosen}}
+    if stale:
+        print(f"anchors not found exactly once (name: count): {stale}")
         return 2
     survivors = 0
     for browser in sorted({m.browser for m in chosen}):

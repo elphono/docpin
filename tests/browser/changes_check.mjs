@@ -1,16 +1,22 @@
 // Drives "what changed since the last send" in a real headless Chromium.
 //
-//   node changes_check.mjs <playwright-dir> <base-url> <doc-id> <out-dir> <doc-path>
+//   node changes_check.mjs <playwright-dir> <base-url> <doc-id> <out-dir> <doc-path> \
+//        <nested-doc-id> <mixed-doc-id> <siblings-doc-id>
 //
 // The Python side (tests/test_browser.py) sent version A of the document,
 // wrote version B, and checks afterwards what reached the server. First the
 // pure comparison (diff.js) on crafted pairs, then the page as the reader
-// sees it. Each step prints one line; any failure exits non-zero.
+// sees it, then three documents of blocks inside blocks. Each step prints
+// one line; any failure exits non-zero.
 import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const [pwDir, base, docId, outDir, docPath] = process.argv.slice(2);
+const [pwDir, base, docId, outDir, docPath, nestedId, mixedId, siblingsId] = process.argv.slice(2);
+if (!nestedId || !mixedId || !siblingsId) {
+  console.error('FAIL the nested, mixed and siblings document ids are missing');
+  process.exit(1);
+}
 const require = createRequire(join(pwDir, 'package.json'));
 const { chromium } = require('playwright');
 
@@ -59,7 +65,8 @@ try {
     .querySelector('.bar').textContent.includes('Changes since your last send'));
   step('changes panel shown');
 
-  // 1. Exactly one new, one changed, one removed, on the right blocks.
+  // 1. An addition, a modification, a removal: exactly one mark each, on the
+  // right blocks (none of them inside another; nested blocks: steps 11, 12).
   const marks = await page.evaluate(() => ({
     news: [...document.querySelectorAll('.annotate-new')].map((n) => n.textContent),
     changed: [...document.querySelectorAll('.annotate-changed')].map((n) => n.textContent),
@@ -190,6 +197,192 @@ try {
   const witness = await page.evaluate(() => document.querySelectorAll('.annotate-new,.annotate-changed,annotate-fold,.annotate-dim').length);
   if (witness || (await barText()).includes('Changes since')) fail('after Mark as read: ' + witness + ' marks');
   step('Mark as read: no mark, no fold, no panel');
+
+  // Blocks inside blocks. The invariant above, for nesting: a block inside a
+  // NEW block says nothing more than it, so the topmost new block carries the
+  // ONLY mark (class, tag, step, row); under a CHANGED block, a new or changed
+  // block keeps its own mark, which is another piece of news.
+  // A resize re-renders on the frame AFTER the ResizeObserver: wait past it.
+  const frames = () => page.evaluate(() => new Promise((r) =>
+    setTimeout(() => requestAnimationFrame(() => requestAnimationFrame(r)), 50)));
+  const settled = async (id) => {
+    await page.goto(`${base}/docs/${id}`);
+    await page.waitForFunction(() => {
+      const host = document.querySelector('annotate-root');
+      return host && host.dataset.changes && host.dataset.changes !== 'pending';
+    });
+    const state = await page.evaluate(() => document.querySelector('annotate-root').dataset.changes);
+    if (state !== 'shown') fail(id + ': the comparison state is ' + state);
+    await frames();
+  };
+  const drawn = () => page.evaluate(() => {
+    const root = document.querySelector('annotate-root').shadowRoot;
+    // A block by its tag and its first text: "div:1" for the first card.
+    const label = (n) => {
+      const first = document.createTreeWalker(n, NodeFilter.SHOW_TEXT,
+        { acceptNode: (t) => (t.data.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP) }).nextNode();
+      return n.localName + ':' + (first ? first.data.trim() : '');
+    };
+    return {
+      news: [...document.querySelectorAll('.annotate-new')].map(label),
+      changed: [...document.querySelectorAll('.annotate-changed')].map(label),
+      dim: [...document.querySelectorAll('.annotate-dim')].map(label),
+      tags: [...root.querySelectorAll('.chg-tag')].map((t) => t.textContent),
+      counts: [...root.querySelectorAll('.chg-counts div')].map((d) => d.textContent).join(','),
+      rows: [...root.querySelectorAll('.chg-list li')].map((li) => li.textContent),
+      nav: root.querySelector('.chg-nav span').textContent,
+      bar: root.querySelector('.counts').textContent,
+    };
+  });
+  // No tag covers another tag, nor any text of the page (its own block's first),
+  // and each mark has its own tag, at the top left of its block.
+  const overlaps = () => page.evaluate(() => {
+    const root = document.querySelector('annotate-root').shadowRoot;
+    const tags = [...root.querySelectorAll('.chg-tag')]
+      .filter((t) => t.style.display !== 'none').map((t) => t.getBoundingClientRect());
+    const cross = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
+      Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
+    const found = [];
+    tags.forEach((a, i) => tags.slice(i + 1).forEach((b) => { if (cross(a, b)) found.push('tag on tag'); }));
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.data.trim() || n.parentElement.closest('style,script')) continue;
+      const range = document.createRange();
+      range.selectNodeContents(n);
+      for (const rect of range.getClientRects()) {
+        if (tags.some((t) => cross(t, rect))) found.push('tag on "' + n.data.trim().slice(0, 24) + '"');
+      }
+    }
+    // Each mark has its tag over the left part of its block, above its text:
+    // on the top edge of a padded block (not wholly above it, on the block
+    // before, as in 0.4.0), just above a block without padding.
+    for (const block of document.querySelectorAll('.annotate-new, .annotate-changed')) {
+      const b = block.getBoundingClientRect();
+      const s = getComputedStyle(block);
+      const room = parseFloat(s.borderTopWidth) + parseFloat(s.paddingTop);
+      const low = room > 2 ? b.top + 1 : b.top - 2;
+      const own = tags.some((t) => t.left >= b.left - 1 && t.left <= b.left + Math.min(30, b.width / 2) &&
+        t.bottom > low && t.bottom <= b.top + room + 0.5);
+      if (!own) found.push('no tag on the top edge of "' + block.textContent.trim().slice(0, 24) + '"');
+    }
+    return { tags: tags.length, found };
+  });
+  // The section only, the floating bar hidden: it covers the right column.
+  const shoot = async (name, from, to, withBar = false) => {
+    const clip = await page.evaluate(([a, b, bar]) => {
+      document.querySelector('annotate-root').shadowRoot.querySelector('.bar').style.visibility = bar ? '' : 'hidden';
+      const top = document.querySelector(a).getBoundingClientRect().top + scrollY - 34;
+      const bottom = document.querySelector(b).getBoundingClientRect().bottom + scrollY + 20;
+      return { x: 0, y: Math.max(0, top), width: document.documentElement.clientWidth, height: bottom - top };
+    }, [from, to, withBar]);
+    await page.screenshot({ path: join(outDir, name), fullPage: true, clip });
+    await page.evaluate(() => { document.querySelector('annotate-root').shadowRoot.querySelector('.bar').style.visibility = ''; });
+  };
+
+  // 11. The capture of 2026-10-14: a new section of three cards, each card a
+  // new block holding a new h3 and two new paragraphs. 4 marks, not 13.
+  await settled(nestedId);
+  const nest = await drawn();
+  const expectNews = ['h2:Planned improvements', 'div:1', 'div:2', 'div:3'];
+  if (nest.news.join('|') !== expectNews.join('|')) fail('nested new: ' + JSON.stringify(nest.news));
+  if (nest.changed.length || nest.dim.length) fail('nested changed or dim: ' + JSON.stringify(nest));
+  if (await page.evaluate(() => document.querySelectorAll('.card h3[class*="annotate-"], .card p[class*="annotate-"]').length)) {
+    fail('a block inside a new card is marked');
+  }
+  if (nest.tags.join(',') !== 'NEW,NEW,NEW,NEW') fail('nested tags: ' + nest.tags.join(','));
+  if (nest.counts !== '4new,0changed,0removed' || nest.rows.length !== 4 || nest.nav !== '– / 4' ||
+      !nest.bar.includes(' · 4 changes')) fail('nested panel: ' + JSON.stringify(nest));
+  // A card's own text is its number: its row reads by all its text.
+  if (!nest.rows[1].includes('1 Offline reading Pages stay')) fail('card row: ' + nest.rows[1]);
+  const nestGeo = await overlaps();
+  if (nestGeo.tags !== 4 || nestGeo.found.length) fail('nested tags placed: ' + JSON.stringify(nestGeo));
+  step('nested: 4 marks (h2 + 3 cards), nothing inside a card, panel 4 new');
+  await shoot('nested-panel.png', 'main > h2:nth-of-type(2)', '.grid', true);
+  await shoot('nested-light.png', 'main > h2:nth-of-type(2)', '.grid');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await shoot('nested-dark.png', 'main > h2:nth-of-type(2)', '.grid');
+  await page.setViewportSize({ width: 375, height: 800 });
+  await frames();
+  const phoneGeo = await overlaps();
+  if (phoneGeo.tags !== 4 || phoneGeo.found.length) fail('nested tags placed at 375 px: ' + JSON.stringify(phoneGeo));
+  await shoot('nested-phone-dark.png', 'main > h2:nth-of-type(2)', '.grid');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await shoot('nested-phone.png', 'main > h2:nth-of-type(2)', '.grid');
+  await page.setViewportSize({ width: 1100, height: 800 });
+  step('nested: no tag on a tag or on text, at 1100 and 375 px');
+  const stops = [];
+  for (let i = 0; i < 5; i++) {
+    const at = await nav('▼');
+    const flashed = await page.evaluate(() => {
+      const n = document.querySelector('.annotate-flash');
+      return n && n.classList.contains('annotate-new') ? n.localName : 'not a drawn mark';
+    });
+    stops.push(at + ' ' + flashed);
+  }
+  if (stops.join('|') !== '1 / 4 h2|2 / 4 div|3 / 4 div|4 / 4 div|1 / 4 h2') fail('nested navigator: ' + stops.join('|'));
+  step('nested: ▼ stops on the 4 marks only: ' + stops.join(' → '));
+
+  // 12. Mixed: CHANGED above NEW keeps both, CHANGED above CHANGED keeps both,
+  // NEW above CHANGED keeps the NEW only (and no highlighted word under it).
+  await settled(mixedId);
+  const mix = await drawn();
+  if (mix.changed.join('|') !== 'div:Status: final for review|div:Budget: twelve units per week|' +
+      'h3:Budget: twelve units per week') {
+    fail('mixed changed: ' + JSON.stringify(mix.changed));
+  }
+  if (mix.news.join('|') !== 'p:A paragraph added inside a changed block.|div:Extended this week') {
+    fail('mixed new: ' + JSON.stringify(mix.news));
+  }
+  const status = await page.evaluate(() => {
+    const box = document.querySelector('main > div');
+    return box.querySelectorAll('.annotate-new,.annotate-changed').length +
+      (box.matches('.annotate-new,.annotate-changed') ? 1 : 0);
+  });
+  if (status !== 2) fail('the changed block with a new paragraph carries ' + status + ' marks');
+  // The unchanged paragraph of a changed block is dimmed (the witness that the
+  // dimming ran); the absorbed changed paragraph under a new block is not.
+  if (mix.dim.join('|') !== 'p:The plan holds for the quarter.') fail('mixed dim: ' + JSON.stringify(mix.dim));
+  const mixWords = await page.evaluate(() => {
+    const h = CSS.highlights && CSS.highlights.get('annotate-added');
+    return h ? [...h].map((r) => r.toString()).sort().join(',') : null;
+  });
+  if (mixWords !== 'beta,final,twelve') fail('mixed highlighted words: ' + mixWords);
+  if (mix.tags.slice().sort().join(',') !== 'CHANGED,CHANGED,CHANGED,NEW,NEW' ||
+      mix.counts !== '2new,3changed,0removed' || mix.rows.length !== 5 || mix.nav !== '– / 5' ||
+      !mix.bar.includes(' · 5 changes')) fail('mixed panel: ' + JSON.stringify(mix));
+  const mixGeo = await overlaps();
+  if (mixGeo.tags !== 5 || mixGeo.found.length) fail('mixed tags placed: ' + JSON.stringify(mixGeo));
+  step('mixed: CHANGED + NEW, CHANGED + CHANGED, NEW alone over a changed block; words: ' + mixWords);
+  await shoot('mixed-light.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await shoot('mixed-dark.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
+  await page.setViewportSize({ width: 375, height: 800 });
+  await frames();
+  const mixPhone = await overlaps();
+  if (mixPhone.tags !== 5 || mixPhone.found.length) fail('mixed tags placed at 375 px: ' + JSON.stringify(mixPhone));
+  await shoot('mixed-phone-dark.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
+  await page.emulateMedia({ colorScheme: 'light' });
+  await shoot('mixed-phone.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
+  step('mixed: no tag on a tag or on text, at 1100 and 375 px');
+
+  // 13. Sibling blocks in a card that is no block (a dot, a title, two
+  // paragraphs in an <article>): none of their tags on another, each on its block.
+  await settled(siblingsId);
+  for (const width of [1100, 375]) {
+    await page.setViewportSize({ width, height: 800 });
+    await frames();
+    const geo = await overlaps();
+    // How many marks such siblings deserve is not settled here, only where
+    // their tags go; they may cover the block above, the 0.4.0 place for a
+    // block without padding.
+    const kept = geo.found.filter((f) => !f.startsWith('tag on "'));
+    if (!geo.tags || kept.length) fail('sibling tags at ' + width + ' px: ' + JSON.stringify(geo));
+  }
+  await shoot('siblings-phone.png', 'main > h2:nth-of-type(2)', '.grid');
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await frames();
+  await shoot('siblings-light.png', 'main > h2:nth-of-type(2)', '.grid');
+  step('siblings: no tag on another tag, each on its own block, at 1100 and 375 px');
   if (errors.length) fail('page errors: ' + errors.join(' | '));
 } finally {
   await browser.close();
