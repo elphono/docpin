@@ -288,8 +288,10 @@ def cmd_folders(args: argparse.Namespace, cfg: config.Config) -> int:
 def cmd_rescan(args: argparse.Namespace, cfg: config.Config) -> int:
     days = scanner.check_days(args.days)
     only = str(folders.normalise(args.folder)) if args.folder else None
-    added = scanner.catch_up(days, only)
-    print(f"{len(added)} document(s) registered from the last {days:g} day(s)")
+    result = scanner.rescan(days, only, listening=_listeners(cfg))
+    print(f"{len(result['added'])} document(s) registered from the last {days:g} day(s), "
+          f"{len(result['removed'])} older one(s) unmanaged")
+    _print_kept(result["kept"])
     return 0
 
 
@@ -411,10 +413,12 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("folder", nargs="?")
     p.set_defaults(run=cmd_folders)
 
-    p = sub.add_parser("rescan", help="register the documents written in the last days")
+    p = sub.add_parser("rescan", help="register the documents written in the last days, "
+                                      "unmanage the older ones")
     p.add_argument("--days", default=None,
                    help=f"how far back, in days (default {scanner.DEFAULT_DAYS})")
-    p.add_argument("--folder", default=None, help="only this tracked folder")
+    p.add_argument("--folder", default=None,
+                   help="only this tracked folder (and only what is under it is unmanaged)")
     p.set_defaults(run=cmd_rescan)
 
     p = sub.add_parser("sync", help="carry a conversation to your other machine")

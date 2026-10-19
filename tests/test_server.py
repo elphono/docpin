@@ -337,14 +337,34 @@ def test_a_folder_added_from_the_page_is_tracked_and_its_recent_files_taken(daem
 
 
 def test_a_rescan_from_the_page_covers_every_folder(daemon, tmp_path):
+    import os
     doc = tmp_path / "workspace" / "repo" / "docs" / "a.html"
     doc.parent.mkdir(parents=True)
     doc.write_text("<title>A</title>")
+    old = doc.parent / "old.html"                    # listed, and older than any window
+    old.write_text("<title>Old</title>")
+    os.utime(old, (1000.0, 1000.0))
+    old_id = registry.register(old)["id"]
     assert daemon.request("POST", "/api/scan", {"days": 1}) == \
         (202, {"started": True, "days": 1.0})
-    assert _settled(daemon)["scan"]["last"]["added"] == 1
+    last = _settled(daemon)["scan"]["last"]
+    assert (last["added"], last["removed"], last["kept"], last["prune"]) == (1, 1, 0, True)
+    assert old_id not in registry.all_docs() and old.exists()
     assert daemon.request("POST", "/api/scan")[1]["days"] == 7.0    # no body: the default
     _settled(daemon)
+
+
+def test_a_rescan_from_the_page_keeps_the_document_a_session_waits_for(daemon, make_doc):
+    import os
+    path = make_doc("<p>w</p>")
+    os.utime(path, (1000.0, 1000.0))
+    doc_id = registry.register(path)["id"]
+    thread, box = _hold(daemon, doc_id)
+    daemon.request("POST", "/api/scan", {"days": 1})
+    last = _settled(daemon)["scan"]["last"]
+    assert (last["removed"], last["kept"]) == (0, 1) and doc_id in registry.all_docs()
+    daemon.srv.sender.board.deliver(doc_id, "release")
+    thread.join(10)
 
 
 def test_a_folder_removed_from_the_page_is_no_longer_listed(daemon, tmp_path):

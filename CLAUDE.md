@@ -75,6 +75,15 @@ sont pas réécrits.
 « Unmanage » tant qu'il n'a pas été réécrit (`forgotten.json`, date du fichier au moment de
 l'oubli). Le passage régulier, lui, ne rattrape toujours rien.
 
+**« Rescan » fait aussi le ménage** (2026-10-19, `scanner.rescan` = `catch_up` + `prune`) : la
+liste devient les documents de la fenêtre, ceux dont le fichier est plus vieux passent en
+« Unmanage » (sous `--folder D` seulement, si donné), et reviennent s'ils sont réécrits. L'ajout
+d'un dossier, lui, ne retire rien. **Un lot ne prend jamais un document protégé**, et la règle
+n'a qu'une copie (`registry.protection`, servie à la page dans `protected`) : une session qui
+écoute, le statut `delivered`, un fichier manquant, et — ajout de ce chantier — des notes non
+envoyées, qu'un Unmanage effacerait. La ligne de commande demande au démon (en lecture) qui
+écoute ; sans démon, personne. Le rapport dit ajoutés, retirés, gardés.
+
 **La page d'accueil (`/`, ouverte d'un clic gauche sur la pastille) porte tous les contrôles
 de la pastille** : par document Open, Send to session, New session, Unmanage, Delete file ; les
 dossiers suivis (ajout avec suggestions, retrait), les dossiers exclus (mêmes suggestions) et
@@ -152,7 +161,7 @@ uv run annotate list | open [<id>] | send <id> | new-session <id> | resend <id> 
 uv run annotate sessions                 # les conversations auxquelles rattacher un document
 uv run annotate attach <id> <session> [--cwd DIR] | detach <id>
 uv run annotate folders [add|remove|exclude|unexclude <dossier>]   # suivis et exclus
-uv run annotate rescan [--days N] [--folder D]   # rattrape les N derniers jours
+uv run annotate rescan [--days N] [--folder D]   # rattrape les N derniers jours, retire les plus vieux
 uv run annotate serve                    # le démon, au premier plan
 uv run annotate service                  # écrit ~/.config/systemd/user/annotate.service
 uv run annotate tray [--start|--once|--uninstall]   # pastille Windows + raccourci Démarrage
@@ -209,6 +218,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | un dossier ne se suit que sous `~` ; un dossier ajouté suit tout `.html`, le workspace garde sa règle `docs/` | `test_a_folder_outside_the_home_directory_or_not_absolute_is_refused`, `test_a_folder_the_user_adds_tracks_every_html_under_it` |
 | rien sous un dossier exclu n'est un document, même dans un dossier suivi ou un `docs/` du workspace, pour le hook comme pour le parcours ; l'exclure passe en Unmanage ce qui est listé dessous, jamais un protégé, jamais rien à côté | `test_a_document_under_an_excluded_folder_is_never_wanted_even_in_a_tracked_one`, `test_register_for_the_hook_refuses_a_document_under_an_excluded_folder`, `test_excluding_a_folder_unmanages_the_documents_listed_under_it`, `test_excluding_a_folder_keeps_a_document_a_batch_never_takes`, `tests/browser/index_check.mjs` |
 | un rescan ne prend que les N derniers jours, un à la fois, et ne ramène pas un document oublié | `test_a_catch_up_takes_the_recent_window_only`, `test_one_catch_up_at_a_time_and_the_last_one_is_reported`, `test_an_unmanaged_document_stays_out_of_a_catch_up_until_written_again` |
+| un rescan retire ce qui est plus vieux que sa fenêtre (la même frontière que l'ajout), sous `--folder D` seulement sous D ; jamais un protégé (session qui écoute, `delivered`, fichier manquant, notes non envoyées) ; l'ajout d'un dossier ne retire rien | `test_a_catch_up_forgets_the_documents_older_than_its_window`, `test_a_catch_up_of_one_folder_forgets_only_under_it`, `test_a_catch_up_never_forgets_a_protected_document`, `test_adding_a_folder_never_unmanages_an_older_document`, `test_a_rescan_from_the_page_keeps_the_document_a_session_waits_for` |
 | un document ne se rattache qu'à une conversation que `claude --resume` trouverait ; le rattachement écrit `session_id`, sans toucher au statut ni garder un worktree disparu | `test_attaching_a_document_writes_its_session_and_moves_it_to_that_group`, `test_a_session_this_machine_cannot_resume_is_refused_with_a_400`, `test_an_attach_keeps_the_status_and_never_a_deleted_worktree_folder` |
 | la liste des sessions ne propose que des conversations reprenables, jamais un sous-agent, les ouvertes d'abord, bornée sans couper une session ouverte | `test_the_list_offers_only_resumable_conversations_and_never_a_subagent`, `test_open_sessions_come_first_then_the_most_recently_active`, `test_the_list_is_bounded_and_never_cuts_an_open_session` |
 | une session se range sous le dépôt qui contient son dossier (sous-dossier et worktree compris), jamais sous un dépôt du home ; les sessions d'un dépôt se regroupent, les documents sans session restent à part, en dernier | `test_each_session_group_names_the_repository_it_works_in`, `test_a_repository_in_the_home_directory_holds_no_session`, `tests/browser/index_check.mjs` |

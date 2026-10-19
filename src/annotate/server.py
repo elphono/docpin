@@ -34,7 +34,8 @@
     GET    /api/folders/suggest?path=<text>  subfolders, for the folder field
     GET    /api/sessions                     the conversations a document can be attached
                                              to: open first, then most recent (claude.sessions)
-    POST   /api/scan     {days}              catch up every tracked folder (scanner)
+    POST   /api/scan     {days}              rescan: catch up every tracked folder, and
+                                             unmanage what is older than the window (scanner)
     GET    /api/sync                         the sync settings (never a secret), what was
                                              received and sent (sync.py)
     POST   /api/sync     {enabled, store…}   change the settings
@@ -143,7 +144,7 @@ class AnnotateServer(ThreadingHTTPServer):
         self.cfg = cfg
         self.sender = send
         self.wait_hold = WAIT_HOLD
-        self.catchups = scanner.CatchUps()
+        self.catchups = scanner.CatchUps(send.board.listening)
         self.google = sync.GoogleLogins()
         # A daemon running the plugin's stable copy watches the copy that
         # `current` points at: a new version makes a new copy (runtime.py).
@@ -329,7 +330,7 @@ class Handler(BaseHTTPRequestHandler):
         if parts == ["api", "scan"] and method == "POST":
             body = self._body()
             days = scanner.check_days(body.get("days") if isinstance(body, dict) else None)
-            started = self.server.catchups.start(days)
+            started = self.server.catchups.start(days, prune=True)
             if started:
                 log.info("rescan of every folder (%g days) requested from the web page", days)
             return self._json(HTTPStatus.ACCEPTED, {"started": started, "days": days})

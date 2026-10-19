@@ -187,6 +187,30 @@ def test_register_for_the_hook_takes_only_a_document_of_a_tracked_folder(tmp_pat
     assert cli.main(["register", str(outside)]) == 0      # by hand: always
 
 
+def test_a_rescan_from_the_command_line_keeps_what_a_session_waits_for(daemon, make_doc,
+                                                                      capsys):
+    """The command line asks the daemon which documents a session waits for."""
+    import os
+    waited_path = make_doc("<p>w</p>", name="w.html")
+    other_path = make_doc("<p>o</p>", name="o.html")
+    for path in (waited_path, other_path):
+        os.utime(path, (1000.0, 1000.0))
+    waited = registry.register(waited_path)["id"]
+    other = registry.register(other_path)["id"]
+    box: dict[str, object] = {}
+    waiter = threading.Thread(target=lambda: box.update(
+        w=daemon.sender.board.wait(waited, "s1", "/", lambda: True, 10)), daemon=True)
+    waiter.start()
+    assert _listening(waited)
+    assert cli.main(["rescan", "--days", "7"]) == 0
+    out = capsys.readouterr().out
+    assert "1 older one(s) unmanaged" in out
+    assert f"kept {waited}  (a session listens for its notes)" in out
+    assert list(registry.all_docs()) == [waited] and other not in registry.all_docs()
+    daemon.sender.board.deliver(waited, "release")
+    waiter.join(5)
+
+
 def test_register_for_the_hook_refuses_a_document_under_an_excluded_folder(
         tmp_path, capsys, monkeypatch):
     from annotate import folders
@@ -256,8 +280,9 @@ def test_sessions_attach_and_detach_from_the_command_line(make_doc, capsys, tmp_
     assert "detached" in capsys.readouterr().out
 
 
-def test_folders_and_rescan_from_the_command_line(tmp_path, capsys):
+def test_folders_and_rescan_from_the_command_line(tmp_path, capsys, monkeypatch):
     import os
+    monkeypatch.setenv("ANNOTATE_PORT", str(_free_port()))   # no daemon: nobody listens
     reports = tmp_path / "reports"
     reports.mkdir()
     (reports / "r.html").write_text("<title>R</title>")
@@ -266,8 +291,13 @@ def test_folders_and_rescan_from_the_command_line(tmp_path, capsys):
     listed = capsys.readouterr().out
     assert f"{reports.resolve()}  every .html" in listed and "only under a docs/" in listed
     assert cli.main(["rescan", "--folder", str(reports), "--days", "1"]) == 0
-    assert "1 document(s)" in capsys.readouterr().out
-    os.utime(reports / "r.html", (1000.0, 1000.0))
+    assert "1 document(s) registered from the last 1 day(s), 0 older one(s) unmanaged" in \
+        capsys.readouterr().out
+    os.utime(reports / "r.html", (1000.0, 1000.0))            # now older than any window
+    assert cli.main(["rescan", "--folder", str(reports), "--days", "1"]) == 0
+    assert "0 document(s) registered from the last 1 day(s), 1 older one(s) unmanaged" in \
+        capsys.readouterr().out
+    assert registry.all_docs() == {}
     assert cli.main(["folders", "remove", str(reports.resolve())]) == 0
     assert cli.main(["folders", "remove", str(reports.resolve())]) == 1
     assert cli.main(["rescan", "--days", "0"]) == 1

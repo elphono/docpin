@@ -139,6 +139,9 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     (ws / "repo" / "sub").mkdir(parents=True)        # a second session of the repository `repo`
     foxtrot = registry.register(foxtrot_path, session="s-untitled", cwd=ws / "repo" / "sub")["id"]
     foxtrot_path.unlink()
+    juliet_path = make_doc("<p>j</p>", name="j.html", title="Juliet")   # 40 days old
+    os.utime(juliet_path, (now - 40 * 86400,) * 2)
+    juliet = registry.register(juliet_path, session="s-other", cwd=ws / "other")["id"]
     registry.replace_annotations(alpha, [{"id": "n1", "selector": "body", "quote": "a",
                                           "note": "from the index page"}])
     reports = tmp_path / "pick" / "reports"          # no docs/ on the way
@@ -171,6 +174,7 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     from annotate import folders
     delta = (reports / "delta.html").resolve()
     assert set(registry.all_docs()) == {alpha, echo, foxtrot}
+    assert registry.dismissed(juliet_path, juliet_path.stat().st_mtime) and juliet  # rescan
     assert registry.dismissed(delta, delta.stat().st_mtime)     # unmanaged by the exclusion
     assert [f["path"] for f in folders.load()] == [str((tmp_path / "workspace").resolve())]
     assert folders.load_excluded() == []                        # and the exclusion removed

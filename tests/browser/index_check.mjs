@@ -28,7 +28,7 @@ try {
   page.on('dialog', async (d) => { dialogs.push(d.message()); await d.accept(); });
   await page.goto(base + '/');
   await page.waitForSelector('section .doc');
-  await page.waitForFunction(() => document.querySelectorAll('.doc').length === 5);
+  await page.waitForFunction(() => document.querySelectorAll('.doc').length === 6);
 
   const heads = await page.locator('#groups .group h3').allTextContents();
   if (heads.length !== 4 || !heads.includes('Live session') || !heads.includes('Other session') ||
@@ -77,7 +77,7 @@ try {
   if (!(await row('Foxtrot').locator('.badge.danger').count())) fail('no missing-file badge');
   step('states at a glance: ' + JSON.stringify(classes));
   const stats = await page.locator('#overview .value').allTextContents();
-  if (JSON.stringify(stats) !== '["5","1","1"]') fail('overview: ' + JSON.stringify(stats));
+  if (JSON.stringify(stats) !== '["6","1","1"]') fail('overview: ' + JSON.stringify(stats));
   step('overview: documents, notes to send, sessions open = ' + stats.join(', '));
   if ((await row('Alpha').getByRole('button', { name: 'Send to session' }).getAttribute('class')) !== 'primary' ||
       (await row('Charlie').getByRole('button', { name: 'Send to session' }).getAttribute('class')) === 'primary') {
@@ -109,7 +109,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.doc').length === 1 &&
     document.querySelector('.doc').textContent.includes('Alpha'));
   await page.locator('#show-all').click();
-  await page.waitForFunction(() => document.querySelectorAll('.doc').length === 5);
+  await page.waitForFunction(() => document.querySelectorAll('.doc').length === 6);
   step('filter by text, and "Notes to send" shows Alpha alone');
 
   // Attach Bravo, which has no known session, through the picker.
@@ -241,8 +241,13 @@ try {
   await page.locator('#days').selectOption('30');
   await page.getByRole('button', { name: 'Rescan all folders' }).click();
   await page.waitForFunction(() => document.getElementById('message').textContent.startsWith('Rescan started'));
-  await page.waitForFunction(() => document.getElementById('scan-state').textContent.includes('0 document(s) added'));
+  // A rescan also clears (2026-10-19): Juliet, 40 days old, leaves the list;
+  // Foxtrot, as old by the registry but missing on disk, is protected.
+  await page.waitForFunction(() => document.getElementById('scan-state').textContent
+    .includes('0 document(s) added, 1 older one(s) removed (1 kept'));
+  await page.waitForFunction(() => !document.getElementById('groups').textContent.includes('Juliet'));
   if (await page.locator('.doc', { hasText: 'Bravo' }).count()) fail('the rescan brought back an unmanaged document');
+  if (!(await page.locator('.doc', { hasText: 'Foxtrot' }).count())) fail('the rescan took a protected document');
   step('rescan: ' + (await page.locator('#scan-state').textContent()));
 
   await page.getByRole('button', { name: 'Restart daemon' }).click();

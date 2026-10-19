@@ -12,7 +12,8 @@
  * here: a stopped daemon serves no page to click it on; the tray keeps it.
  * For the tracked folders (decision of 2026-10-07): add one under the home
  * directory, remove one, and "Rescan", which registers what was written in
- * the last N days; adding a folder does the same for that folder. The
+ * the last N days and unmanages the older documents (never a protected one:
+ * the daemon says which, `protected`); adding a folder only registers. The
  * excluded folders (decision of 2026-10-19): add one (the same proposals as
  * for a tracked folder), which unmanages what is listed under it, or remove
  * one; whether a file is a document stays the daemon's answer.
@@ -608,8 +609,13 @@
         (scan.running.folder ? ', ' + tilde(scan.running.folder) : '') + ')…';
     } else if (scan.last) {
       if (scan.last.error) scanState.className = 'error';
+      // A rescan also unmanages what is older than its window; adding a
+      // folder only adds.
+      const removed = scan.last.prune ? scan.last.removed + ' older one(s) removed' +
+        (scan.last.kept ? ' (' + scan.last.kept + ' kept: a session is on it, notes wait, ' +
+          'or its file is missing)' : '') + ', ' : '';
       scanState.textContent = scan.last.error ? 'Last rescan failed: ' + scan.last.error
-        : 'Last rescan: ' + scan.last.added + ' document(s) added, ' +
+        : 'Last rescan: ' + scan.last.added + ' document(s) added, ' + removed +
           new Date(scan.last.ended_at).toLocaleTimeString();
     } else {
       scanState.textContent = '';
@@ -880,7 +886,8 @@
   $('rescan').addEventListener('click', (e) => act(e.currentTarget, async () => {
     const answer = await call('POST', '/api/scan', { days: Number(daysSelect.value) });
     return answer.started ? 'Rescan started: files written in the last ' + answer.days +
-      ' day(s), in every tracked folder.' : 'A rescan is already running.';
+      ' day(s), in every tracked folder, are listed; older documents leave the list.'
+      : 'A rescan is already running.';
   }));
 
   $('exclude-folder').addEventListener('submit', (e) => {

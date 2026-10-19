@@ -383,6 +383,80 @@ def test_a_catch_up_of_one_folder_leaves_the_others_alone(ws, tmp_path):
         scanner.catch_up(7, only="/nowhere", now=NOW)
 
 
+# -- the rescan also clears (2026-10-19) ------------------------------------------
+
+def test_a_catch_up_forgets_the_documents_older_than_its_window(ws):
+    since = NOW - 7 * scanner.DAY
+    fresh = write(ws, "repo/docs/fresh.html", NOW - scanner.DAY)
+    edge = write(ws, "repo/docs/edge.html", since + 1)            # just inside the window
+    at_edge = write(ws, "repo/docs/at-edge.html", since)          # where catch_up stops
+    old = write(ws, "repo/docs/old.html", NOW - 30 * scanner.DAY)
+    ids = {p.name: registry.register(p)["id"] for p in (fresh, edge, at_edge, old)}
+    result = scanner.rescan(7, now=NOW, listening=nobody)
+    assert result["added"] == [] and result["kept"] == []
+    assert sorted(result["removed"]) == sorted([ids["at-edge.html"], ids["old.html"]])
+    assert set(registry.all_docs()) == {ids["fresh.html"], ids["edge.html"]}
+    for path in (at_edge, old):                                   # unmanaged: remembered
+        assert path.exists() and registry.dismissed(path, path.stat().st_mtime)
+    assert scanner.rescan(7, now=NOW, listening=nobody)["removed"] == []    # once only
+    assert scanner.rescan(31, now=NOW, listening=nobody)["added"] == []     # not brought back
+    os.utime(old, (NOW - 10, NOW - 10))                           # written again
+    assert scanner.rescan(7, now=NOW, listening=nobody)["added"] == [ids["old.html"]]
+
+
+def test_a_catch_up_of_one_folder_forgets_only_under_it(ws, tmp_path):
+    other = tmp_path / "other"
+    other.mkdir()
+    folders.add(str(other))
+    old_ws = registry.register(write(ws, "repo/docs/ws.html", NOW - 30 * scanner.DAY))["id"]
+    old_other = registry.register(write(other, "o.html", NOW - 30 * scanner.DAY))["id"]
+    result = scanner.rescan(7, only=str(other.resolve()), now=NOW, listening=nobody)
+    assert result["removed"] == [old_other] and list(registry.all_docs()) == [old_ws]
+    assert scanner.rescan(7, now=NOW, listening=nobody)["removed"] == [old_ws]
+
+
+def test_a_catch_up_never_forgets_a_protected_document(ws):
+    """Each protection alone keeps its document; the unprotected one beside
+    them goes, so that nothing here passes by forgetting nothing."""
+    old = NOW - 30 * scanner.DAY
+    paths = {name: write(ws, f"repo/docs/{name}.html", old)
+             for name in ("listened", "delivered", "missing", "notes", "plain")}
+    ids = {name: registry.register(path)["id"] for name, path in paths.items()}
+    registry.update(ids["delivered"], status="delivered")
+    paths["missing"].unlink()
+    registry.replace_annotations(ids["notes"], [{"id": "n1", "selector": "body",
+                                                 "quote": "x", "note": "not sent yet"}])
+    result = scanner.rescan(7, now=NOW, listening=lambda i: i == ids["listened"])
+    assert result["removed"] == [ids["plain"]]
+    reasons = {item["id"]: item["reason"] for item in result["kept"]}
+    assert reasons == {ids["listened"]: "a session listens for its notes",
+                       ids["delivered"]: "the session is on it",
+                       ids["missing"]: "its file is missing",
+                       ids["notes"]: "notes wait to be sent"}
+    assert set(registry.all_docs()) == set(reasons)
+    assert registry.list_annotations(ids["notes"])[0]["note"] == "not sent yet"
+    assert registry.protection({"listening": False, "status": "answered", "exists": True,
+                                "pending": 0}) == ""
+
+
+def test_adding_a_folder_never_unmanages_an_older_document(ws, tmp_path, monkeypatch):
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    old = registry.register(write(reports, "old.html", NOW - 30 * scanner.DAY))["id"]
+    write(reports, "new.html", NOW - scanner.DAY)
+    monkeypatch.setattr(scanner.time, "time", lambda: NOW)
+    folders.add(str(reports))
+    catchups = scanner.CatchUps(nobody)
+    assert catchups.start(7, only=str(reports.resolve())) is True      # as the page adds one
+    last = _settle(catchups)["last"]
+    assert (last["added"], last["removed"], last["prune"]) == (1, 0, False)
+    assert old in registry.all_docs()
+    assert catchups.start(7, prune=True) is True                        # as Rescan does
+    last = _settle(catchups)["last"]
+    assert (last["added"], last["removed"], last["prune"]) == (0, 1, True)
+    assert old not in registry.all_docs()
+
+
 @pytest.mark.parametrize(("raw", "days"), [(None, 7.0), ("", 7.0), (1, 1.0), ("30", 30.0)])
 def test_the_window_of_a_catch_up(raw, days):
     assert scanner.check_days(raw) == days
@@ -412,7 +486,7 @@ def test_one_catch_up_at_a_time_and_the_last_one_is_reported(ws, monkeypatch):
     monkeypatch.setattr(scanner, "catch_up", held)
     write(ws, "repo/docs/a.html", NOW - scanner.DAY)
     write(ws, "repo/docs/b.html", NOW - 2 * scanner.DAY)
-    catchups = scanner.CatchUps()
+    catchups = scanner.CatchUps(nobody)
     assert catchups.start(7) is True
     assert catchups.start(7) is False                 # a second click
     assert catchups.state()["running"]["days"] == 7
@@ -430,7 +504,7 @@ def test_a_failing_catch_up_is_reported_not_raised(ws, monkeypatch):
         raise OSError("disk hiccup")
 
     monkeypatch.setattr(scanner, "catch_up", broken)
-    catchups = scanner.CatchUps()
+    catchups = scanner.CatchUps(nobody)
     catchups.start(7)
     assert _settle(catchups)["last"]["error"] == "disk hiccup"
     assert catchups.start(7) is True                  # not stuck "running"

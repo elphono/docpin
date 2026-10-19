@@ -25,6 +25,11 @@ next start.
 of the workspace at once, most of them weeks old. It runs in a thread of its
 own: finding the writers of a hundred files reads the transcripts a hundred
 times (0.2 s each, measured).
+
+**"Rescan" also clears** (decision of 2026-10-19): the list then holds the
+documents of the window, and those older are unmanaged (`prune`), as an
+Unmanage does, never one that registry.protection keeps. Adding a folder
+only catches up.
 """
 from __future__ import annotations
 
@@ -33,6 +38,7 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -149,6 +155,41 @@ def catch_up(days: float, only: str | None = None, now: float | None = None) -> 
         return _register_new(candidates(items, start - days * DAY), "rescan")
 
 
+def prune(days: float, only: str | None = None, now: float | None = None, *,
+          listening: Callable[[str], bool]) -> dict[str, list[dict[str, Any]]]:
+    """Unmanage the listed documents whose file is older than the window of
+    the last `days` days, all of them or those under the folder `only`; never
+    a protected one (registry.protection, `listening` naming the documents a
+    session waits for). The window's edge splits the files exactly as
+    `catch_up` does: newer than `since` is taken, the rest may go."""
+    start = time.time() if now is None else now
+    since = start - days * DAY
+    folder = Path(only) if only is not None else None
+
+    def older(doc: dict[str, Any]) -> bool:
+        if folder is not None and not Path(doc["path"]).is_relative_to(folder):
+            return False
+        return doc["mtime"] is None or doc["mtime"] <= since
+
+    result = registry.forget_batch(older, listening)
+    for item in result["forgotten"]:
+        log.info("rescan: %s unmanaged, written more than %g day(s) ago", item["path"], days)
+    return result
+
+
+def rescan(days: float, only: str | None = None, now: float | None = None, *,
+           listening: Callable[[str], bool]) -> dict[str, list[Any]]:
+    """"Rescan" (decision of 2026-10-19): the list becomes the documents of
+    the last `days` days. What was written in the window is registered
+    (`catch_up`), what is older is unmanaged (`prune`), and comes back only
+    when written again (registry.dismissed). Adding a folder only catches up:
+    it never unmanages."""
+    added = catch_up(days, only, now)
+    pruned = prune(days, only, now, listening=listening)
+    return {"added": added, "removed": [d["id"] for d in pruned["forgotten"]],
+            "kept": pruned["kept"]}
+
+
 def check_days(raw: object) -> float:
     """The window of a catch-up, from a request: a number of days, 7 if absent."""
     if raw is None or raw == "":
@@ -166,10 +207,13 @@ def check_days(raw: object) -> float:
 
 class CatchUps:
     """The catch-ups the index page starts, one at a time, in a thread; what
-    the last one did is kept for the page to show."""
+    the last one did is kept for the page to show. `listening` names the
+    documents a session waits for (the daemon's board): a rescan never
+    unmanages them."""
 
-    def __init__(self) -> None:
+    def __init__(self, listening: Callable[[str], bool]) -> None:
         self._lock = threading.Lock()
+        self.listening = listening
         self.running: dict[str, Any] | None = None
         self.last: dict[str, Any] | None = None
 
@@ -177,26 +221,34 @@ class CatchUps:
         with self._lock:
             return {"running": self.running, "last": self.last}
 
-    def start(self, days: float, only: str | None = None) -> bool:
-        """False if a catch-up already runs: the user clicked twice."""
+    def start(self, days: float, only: str | None = None, prune: bool = False) -> bool:
+        """False if a catch-up already runs: the user clicked twice. `prune`
+        makes it a rescan, which also unmanages what is older than the
+        window; adding a folder never does."""
         with self._lock:
             if self.running is not None:
                 return False
-            self.running = {"days": days, "folder": only, "started_at": registry.now_iso()}
-        threading.Thread(target=self._run, args=(days, only), name="rescan",
+            self.running = {"days": days, "folder": only, "prune": prune,
+                            "started_at": registry.now_iso()}
+        threading.Thread(target=self._run, args=(days, only, prune), name="rescan",
                          daemon=True).start()
         return True
 
-    def _run(self, days: float, only: str | None) -> None:
-        error, added = "", []
+    def _run(self, days: float, only: str | None, prune: bool) -> None:
+        error, added, removed, kept = "", [], [], []
         try:
-            added = catch_up(days, only)
+            if prune:
+                result = rescan(days, only, listening=self.listening)
+                added, removed, kept = result["added"], result["removed"], result["kept"]
+            else:
+                added = catch_up(days, only)
         except Exception as exc:  # noqa: BLE001 - reported to the page, never fatal
             log.error("rescan failed: %s", exc)
             error = str(exc)
         with self._lock:
             self.last = {**(self.running or {}), "ended_at": registry.now_iso(),
-                         "added": len(added), "error": error}
+                         "added": len(added), "removed": len(removed), "kept": len(kept),
+                         "error": error}
             self.running = None
 
 
