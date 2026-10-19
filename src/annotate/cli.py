@@ -14,6 +14,7 @@
     annotate detach <id>
     annotate folders [add | remove | exclude | unexclude <folder>]
     annotate rescan [--days N] [--folder <folder>]
+    annotate cleanup [--list | --run]
     annotate serve
     annotate service
     annotate tray [--uninstall] [--start] [--once]
@@ -32,9 +33,10 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
-from . import (__version__, browser, claude, client, config, folders, prompt, registry,
-               scanner, server, service, tray)
+from . import (__version__, browser, claude, cleanup, client, config, folders, prompt,
+               registry, scanner, server, service, tray)
 
 log = logging.getLogger("annotate")
 
@@ -250,7 +252,7 @@ def _listeners(cfg: config.Config) -> Callable[[str], bool]:
     return ids.__contains__
 
 
-def _print_kept(kept: list[dict[str, str]]) -> None:
+def _print_kept(kept: list[dict[str, Any]]) -> None:
     for item in kept:
         print(f"  kept {item['id']}  ({item['reason']})  {item['path']}")
 
@@ -291,6 +293,31 @@ def cmd_rescan(args: argparse.Namespace, cfg: config.Config) -> int:
     result = scanner.rescan(days, only, listening=_listeners(cfg))
     print(f"{len(result['added'])} document(s) registered from the last {days:g} day(s), "
           f"{len(result['removed'])} older one(s) unmanaged")
+    _print_kept(result["kept"])
+    return 0
+
+
+def cmd_cleanup(args: argparse.Namespace, cfg: config.Config) -> int:
+    """"Cleanup files" from the command line (cleanup.py): the batch, as the
+    page's button does; `--list` the files waiting for deletion; `--run` the
+    deletions due now, without waiting for the daemon's hourly look."""
+    if args.list:
+        items = cleanup.listing()
+        if not items:
+            print("no file waits for deletion")
+        for item in items:
+            print(f"deleted on {cleanup.day_of(item['due_at'])}  "
+                  f"(cleaned {cleanup.day_of(item['cleaned_at'])})  {item['path']}")
+        return 0
+    if args.run_now:
+        swept = cleanup.sweep()
+        for path in swept["deleted"]:
+            print(f"deleted {path}")
+        print(f"{len(swept['deleted'])} file(s) deleted, {len(swept['released'])} kept "
+              f"(touched or listed again since their cleanup, or gone)")
+        return 0
+    result = cleanup.batch(_listeners(cfg))
+    print(cleanup.message(len(result["forgotten"]), len(result["kept"])))
     _print_kept(result["kept"])
     return 0
 
@@ -421,6 +448,16 @@ def parser() -> argparse.ArgumentParser:
                    help="only this tracked folder (and only what is under it is unmanaged)")
     p.set_defaults(run=cmd_rescan)
 
+    p = sub.add_parser("cleanup", help="unmanage the documents without a known session; "
+                                       "their files are deleted later if untouched")
+    what = p.add_mutually_exclusive_group()
+    what.add_argument("--list", action="store_true",
+                      help="the files waiting for deletion, and when")
+    # `run` is the attribute every command sets for main(): not this flag's.
+    what.add_argument("--run", action="store_true", dest="run_now",
+                      help="apply the deletions due now")
+    p.set_defaults(run=cmd_cleanup)
+
     p = sub.add_parser("sync", help="carry a conversation to your other machine")
     p.add_argument("action", nargs="?", default="status", choices=("send", "poll", "status"))
     p.add_argument("session", nargs="?", help="for send: its id (default: this session)")
@@ -462,7 +499,7 @@ def _autostart(args: argparse.Namespace, cfg: config.Config) -> None:
 
 ERRORS = (config.ConfigError, registry.RegistryError, client.ClientError,
           browser.OpenError, server.ServerError, service.ServiceError,
-          tray.TrayError, scanner.ScanError, folders.FoldersError,
+          tray.TrayError, scanner.ScanError, folders.FoldersError, cleanup.CleanupError,
           subprocess.SubprocessError)
 
 

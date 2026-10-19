@@ -185,7 +185,7 @@ def exclude(raw: str, *, listening: Callable[[str], bool]) -> dict[str, Any]:
         others = [str(p) for p in load_excluded() if p != folder]
         _save(excluded=[{"path": p} for p in [*others, str(folder)]])
     batch = registry.forget_batch(lambda doc: excluded_by(Path(doc["path"]), [folder]),
-                                  listening)
+                                  listening, cleanup=False)
     return {"folder": {"path": str(folder)}, **batch}
 
 

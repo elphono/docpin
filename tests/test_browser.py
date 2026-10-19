@@ -142,6 +142,13 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     juliet_path = make_doc("<p>j</p>", name="j.html", title="Juliet")   # 40 days old
     os.utime(juliet_path, (now - 40 * 86400,) * 2)
     juliet = registry.register(juliet_path, session="s-other", cwd=ws / "other")["id"]
+    # Without a session: Golf, which "Cleanup files" takes, and Hotel, delivered
+    # (the session is on it), which it keeps.
+    golf_path = make_doc("<p>g</p>", name="g.html", title="Golf")
+    golf = registry.register(golf_path, session="")["id"]
+    hotel = registry.register(make_doc("<p>h</p>", name="h.html", title="Hotel"),
+                              session="")["id"]
+    registry.update(hotel, status="delivered")
     registry.replace_annotations(alpha, [{"id": "n1", "selector": "body", "quote": "a",
                                           "note": "from the index page"}])
     reports = tmp_path / "pick" / "reports"          # no docs/ on the way
@@ -173,7 +180,8 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     assert opener.calls == []
     from annotate import folders
     delta = (reports / "delta.html").resolve()
-    assert set(registry.all_docs()) == {alpha, echo, foxtrot}
+    assert set(registry.all_docs()) == {alpha, echo, foxtrot, hotel} and golf
+    assert golf_path.exists() and set(registry.cleanup_index()) == {str(golf_path)}
     assert registry.dismissed(juliet_path, juliet_path.stat().st_mtime) and juliet  # rescan
     assert registry.dismissed(delta, delta.stat().st_mtime)     # unmanaged by the exclusion
     assert [f["path"] for f in folders.load()] == [str((tmp_path / "workspace").resolve())]

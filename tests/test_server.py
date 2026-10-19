@@ -597,3 +597,54 @@ def test_mark_as_read_needs_the_client_header_and_moves_the_reference(daemon, ma
     status, body = daemon.request("POST", f"/api/docs/{doc_id}/baseline")
     assert status == 200 and body["at"] and registry.get(doc_id)["baseline_at"] == body["at"]
     assert "second" in (registry.read_baseline(doc_id) or "")
+
+
+# -- Cleanup files (2026-10-19) ---------------------------------------------------
+
+def test_cleanup_files_from_the_page_unmanages_what_it_showed_and_deletes_nothing(daemon,
+                                                                                   make_doc):
+    from annotate import cleanup
+    shown = make_doc("<p>s</p>", name="shown.html")
+    later = make_doc("<p>l</p>", name="later.html")            # appeared after the click
+    kept = make_doc("<p>k</p>", name="kept.html")
+    owned = make_doc("<p>o</p>", name="owned.html")
+    ids = {p.name: registry.register(p, session="s-1" if p is owned else "")["id"]
+           for p in (shown, later, kept, owned)}
+    registry.update(ids["kept.html"], status="delivered")
+    listing = daemon.request("GET", "/api/docs")[1]
+    assert listing["cleanup_after_days"] == cleanup.CLEANUP_AFTER_DAYS
+    status, body = daemon.request("POST", "/api/cleanup",
+                                  {"ids": [ids["shown.html"], ids["kept.html"]]})
+    assert status == 200 and (body["forgotten"], body["kept"]) == (1, 1)
+    assert body["after_days"] == 30.0 and "their files are deleted on" in body["message"]
+    assert set(registry.all_docs()) == {ids["later.html"], ids["kept.html"], ids["owned.html"]}
+    assert all(p.exists() for p in (shown, later, kept, owned))
+    assert set(registry.cleanup_index()) == {str(shown)}
+    assert daemon.request("POST", "/api/cleanup", {"ids": "all"})[0] == 400
+    status, body = daemon.request("POST", "/api/cleanup", {})       # no ids: the whole group
+    assert status == 200 and body["forgotten"] == 1
+    assert set(registry.all_docs()) == {ids["kept.html"], ids["owned.html"]}
+
+
+def test_cleanup_files_needs_the_client_header_and_a_local_origin(daemon, make_doc):
+    doc = registry.register(make_doc("<p>a</p>"), session="")["id"]
+    conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)
+    conn.request("POST", "/api/cleanup", body=b"{}",
+                 headers={"Host": f"localhost:{daemon.port}"})
+    assert conn.getresponse().status == 403
+    conn.close()
+    assert daemon.request("POST", "/api/cleanup", {},
+                          headers={"Origin": "https://evil.example"})[0] == 403
+    assert list(registry.all_docs()) == [doc] and registry.cleanup_index() == {}
+    assert daemon.request("GET", "/api/cleanup")[0] == 404
+
+
+def test_cleanup_files_from_the_page_keeps_the_document_a_session_waits_for(daemon, make_doc):
+    doc_id = registry.register(make_doc("<p>w</p>"), session="")["id"]
+    thread, box = _hold(daemon, doc_id, {"session": "", "cwd": "/tmp"})
+    assert daemon.request("GET", "/api/docs")[1]["docs"][0]["protected"] == \
+        "a session listens for its notes"
+    body = daemon.request("POST", "/api/cleanup", {})[1]
+    assert (body["forgotten"], body["kept"]) == (0, 1) and doc_id in registry.all_docs()
+    daemon.srv.sender.board.deliver(doc_id, "release")
+    thread.join(10)

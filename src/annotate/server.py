@@ -8,7 +8,8 @@
     GET    /api/docs                         the registry, with annotation counts, grouped
                                              by session (`open`: a live process of it) and
                                              by repository; `stale`: the code on disk
-                                             changed since the daemon started
+                                             changed since the daemon started;
+                                             `protected`: why a batch leaves a document
     GET    /api/docs/<id>                    one entry
     GET    /api/docs/<id>/annotations        the annotations
     PUT    /api/docs/<id>/annotations        replace them (status -> annotated)
@@ -34,6 +35,9 @@
     GET    /api/folders/suggest?path=<text>  subfolders, for the folder field
     GET    /api/sessions                     the conversations a document can be attached
                                              to: open first, then most recent (claude.sessions)
+    POST   /api/cleanup  {ids}               "Cleanup files": unmanage these documents without
+                                             a session (all of them without ids); their files
+                                             are deleted later if untouched (cleanup.py)
     POST   /api/scan     {days}              rescan: catch up every tracked folder, and
                                              unmanage what is older than the window (scanner)
     GET    /api/sync                         the sync settings (never a secret), what was
@@ -79,7 +83,7 @@ from types import FrameType
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import (browser, claude, config, folders, gdrive, htmldoc, inbox, listeners,
+from . import (browser, claude, cleanup, config, folders, gdrive, htmldoc, inbox, listeners,
                registry, runtime, scanner, sender, service, sync, vault)
 from .config import Config
 
@@ -252,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
             self._error(HTTPStatus.CONFLICT, str(exc))
         except service.ServiceError as exc:
             self._error(HTTPStatus.CONFLICT, str(exc))
-        except (folders.FoldersError, scanner.ScanError) as exc:
+        except (folders.FoldersError, scanner.ScanError, cleanup.CleanupError) as exc:
             self._error(HTTPStatus.BAD_REQUEST, str(exc))
         except sync.SyncRefused as exc:
             self._error(HTTPStatus.FORBIDDEN, str(exc))
@@ -327,6 +331,8 @@ class Handler(BaseHTTPRequestHandler):
                                               "limit": claude.SESSION_LIMIT})
         if parts[:2] == ["api", "sync"]:
             return self._sync(method, parts[2:], query)
+        if parts == ["api", "cleanup"] and method == "POST":
+            return self._cleanup()
         if parts == ["api", "scan"] and method == "POST":
             body = self._body()
             days = scanner.check_days(body.get("days") if isinstance(body, dict) else None)
@@ -365,6 +371,19 @@ class Handler(BaseHTTPRequestHandler):
             log.info("folder %s no longer tracked", entry["path"])
             return self._json(HTTPStatus.OK, {"removed": entry})
         raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET, POST or DELETE")
+
+    def _cleanup(self) -> None:
+        """"Cleanup files": the documents without a known session the page
+        showed (`ids`; all of them without), unmanaged, their files deleted
+        later (cleanup.py)."""
+        body = self._body()
+        body = body if isinstance(body, dict) else {}
+        result = cleanup.batch(self.server.sender.board.listening, body.get("ids"))
+        gone, kept = len(result["forgotten"]), len(result["kept"])
+        log.info("cleanup of %d document(s) without a session requested from the web page", gone)
+        return self._json(HTTPStatus.OK, {
+            "forgotten": gone, "kept": kept, "after_days": cleanup.after_days(),
+            "message": cleanup.message(gone, kept)})
 
     def _excluded(self, method: str, query: dict[str, list[str]]) -> None:
         if method == "POST":
@@ -489,7 +508,8 @@ class Handler(BaseHTTPRequestHandler):
             for group in groups:
                 group["open"] = group["session_id"] in open_ids
             return self._json(HTTPStatus.OK, {"port": self.server.port, "docs": docs,
-                                              "sessions": groups, "stale": self.server.stale})
+                                              "sessions": groups, "stale": self.server.stale,
+                                              "cleanup_after_days": cleanup.after_days()})
         doc_id, action = rest[0], (rest[1] if len(rest) > 1 else "")
         if len(rest) > 2:
             raise Refused(HTTPStatus.NOT_FOUND, "not found")

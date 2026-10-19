@@ -7,6 +7,8 @@ Layout under `config.data_dir()` (default `~/.local/share/annotate`):
     annotations/<id>.json    {"doc_id": id, "annotations": [...]}
     forgotten.json           {"version": 1, "forgotten": {path: mtime}}
     baselines/<id>.html      the document as it was at the last send (take_baseline)
+    cleanup.json             {"version": 1, "files": {path: {"cleaned_at", "mtime", "size"}}}
+                             files "Cleanup files" unmanaged, deleted later (cleanup.py)
 
 **A document the user unmanaged stays out until it is written again**:
 `forget` records the file's date, and the catch-up pass of a rescan
@@ -39,6 +41,8 @@ import fcntl
 import hashlib
 import json
 import os
+import stat
+import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -193,6 +197,89 @@ def _write_forgotten(table: dict[str, float]) -> None:
         raise RegistryError(f"cannot write {forgotten_path()}: {exc}") from exc
 
 
+def cleanup_path() -> Path:
+    return _root() / "cleanup.json"
+
+
+def _read_cleanup() -> dict[str, dict[str, float]]:
+    """The deletion index of cleanup.py. An entry that is not exactly what
+    `forget_batch` writes is left out, so never deleted: a doubt about a
+    deletion keeps the file."""
+    path = cleanup_path()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RegistryError(f"cannot read {path}: {exc}") from exc
+    table = data.get("files") if isinstance(data, dict) else None
+    out: dict[str, dict[str, float]] = {}
+    for key, record in (table if isinstance(table, dict) else {}).items():
+        if not (isinstance(key, str) and os.path.isabs(key) and isinstance(record, dict)):
+            continue
+        values = [record.get(field) for field in ("cleaned_at", "mtime", "size")]
+        numbers = [v for v in values if isinstance(v, (int, float)) and not isinstance(v, bool)]
+        if len(numbers) == 3:
+            out[key] = {"cleaned_at": float(numbers[0]), "mtime": float(numbers[1]),
+                        "size": int(numbers[2])}
+    return out
+
+
+def _write_cleanup(table: dict[str, dict[str, float]]) -> None:
+    try:
+        atomic_write(cleanup_path(), json.dumps({"version": 1, "files": table},
+                                                indent=2, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        raise RegistryError(f"cannot write {cleanup_path()}: {exc}") from exc
+
+
+def cleanup_index() -> dict[str, dict[str, float]]:
+    with locked():
+        return _read_cleanup()
+
+
+def sweep_cleaned(now: float, after: float) -> dict[str, list[str]]:
+    """Delete the files of the cleanup index left untouched `after` seconds
+    since their cleanup; cleanup.py holds the delay and says why.
+
+    Only a file of the index is ever deleted. One registered again (the
+    index should no longer hold it: `register` drops it), touched since (its
+    date or its size changed), no longer a regular file, or gone, leaves the
+    index and stays where it is. One not due yet stays in the index. One that
+    cannot be read or deleted now stays too, for the next sweep."""
+    deleted: list[str] = []
+    released: list[str] = []
+    with locked():
+        index = _read_cleanup()
+        registered = {entry.get("path") for entry in _read_docs().values()}
+        for path, record in list(index.items()):
+            try:
+                info: os.stat_result | None = os.lstat(path)
+            except FileNotFoundError:
+                info = None
+            except OSError:
+                continue
+            touched = (info is None or not stat.S_ISREG(info.st_mode)
+                       or (info.st_mtime, info.st_size) != (record["mtime"], record["size"]))
+            if path in registered or touched:
+                del index[path]
+                released.append(path)
+                continue
+            if now - record["cleaned_at"] < after:
+                continue
+            try:
+                os.remove(path)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                continue
+            del index[path]
+            deleted.append(path)
+        if deleted or released:
+            _write_cleanup(index)
+    return {"deleted": deleted, "released": released}
+
+
 def dismissed(path: Path, mtime: float) -> bool:
     """True if the user unmanaged `path` and it has not been written since."""
     with locked():
@@ -318,6 +405,11 @@ def register(path: Path, session: str | None = None,
         table = _read_forgotten()
         if table.pop(str(path), None) is not None:
             _write_forgotten(table)
+        # Registered again (hook, scan, rescan, by hand): the file is wanted,
+        # a pending deletion is called off (cleanup.py).
+        index = _read_cleanup()
+        if index.pop(str(path), None) is not None:
+            _write_cleanup(index)
         return dict(entry)
 
 
@@ -434,25 +526,31 @@ def protection(doc: dict[str, Any]) -> str:
 
 
 def forget_batch(select: Callable[[dict[str, Any]], bool],
-                 listening: Callable[[str], bool]) -> dict[str, list[dict[str, Any]]]:
+                 listening: Callable[[str], bool], *, cleanup: bool,
+                 now: float | None = None) -> dict[str, list[dict[str, Any]]]:
     """Unmanage, in one pass under the lock, every document that `select`
     picks and `protection` lets go, as `forget` does each one (the file
     stays, remembered in forgotten.json). `select` and `protection` see the
-    document as `summary()` shows it, with `listening(id)`.
+    document as `summary()` shows it, with `listening(id)`. With `cleanup`
+    ("Cleanup files" only), each file also enters the deletion index with
+    its date and size at `now` (cleanup.py): nothing is deleted here.
 
     Returns {"forgotten": [items], "kept": [{"id", "path", "reason"}]}: what
     went, and what was picked but protected."""
     gone: list[dict[str, Any]] = []
     kept: list[dict[str, Any]] = []
+    moment = time.time() if now is None else now
     with locked():
         docs = _read_docs()
         table = _read_forgotten()
+        index = _read_cleanup() if cleanup else {}
         for doc_id, entry in list(docs.items()):
             try:
-                mtime: float | None = Path(entry["path"]).stat().st_mtime
+                info: os.stat_result | None = Path(entry["path"]).stat()
             except OSError:
-                mtime = None
-            item = {**entry, "exists": mtime is not None, "mtime": mtime,
+                info = None
+            mtime = info.st_mtime if info is not None else None
+            item = {**entry, "exists": info is not None, "mtime": mtime,
                     "pending": len(pending(_read_annotations(doc_id))),
                     "listening": bool(listening(doc_id))}
             if not select(item):
@@ -462,10 +560,15 @@ def forget_batch(select: Callable[[dict[str, Any]], bool],
                 kept.append({"id": doc_id, "path": entry["path"], "reason": reason})
                 continue
             _unmanage(docs, doc_id, table)
+            if cleanup and info is not None:
+                index[entry["path"]] = {"cleaned_at": moment, "mtime": info.st_mtime,
+                                         "size": info.st_size}
             gone.append(item)
         if gone:
             _write_docs(docs)
             _write_forgotten(table)
+            if cleanup:
+                _write_cleanup(index)
     return {"forgotten": gone, "kept": kept}
 
 

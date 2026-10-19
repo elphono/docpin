@@ -8,6 +8,8 @@
  * the picker lists the conversations of this machine (/api/sessions, open ones
  * first), filtered as the user types (title, folder, start of the id), and
  * attaching moves the document into that session's group.
+ * In the header of the documents without a known session, "Cleanup files"
+ * (decision of 2026-10-19): an in-page confirmation, then the batch.
  * For the daemon: Restart and Stop. Start is the one control that cannot live
  * here: a stopped daemon serves no page to click it on; the tray keeps it.
  * For the tracked folders (decision of 2026-10-07): add one under the home
@@ -360,6 +362,7 @@
         'Attach each one to its conversation: otherwise Send to session opens a new one.'));
     }
     const tools = make('div', 'group-tools');
+    if (!known) tools.append(cleanupButton(docs));
     tools.append(foldable(section, head, 'session:' + group.session_id,
       known ? 'the session ' + group.title : 'the documents without a known session'));
     head.append(badge, kicker, make('h3', '', group.title), meta, tools);
@@ -438,7 +441,7 @@
     // that does not say `stale` at all predates the check, so it is too.
     staleBanner.hidden = data.stale === false;
     renderOverview(data);
-    if (busy || menuOpen() || picker.open) return;
+    if (busy || menuOpen() || picker.open || cleanupDialog.open) return;
     const key = JSON.stringify([data.docs, data.sessions, filterText, onlyPending, home,
                                 Math.floor(Date.now() / 60000)]);
     if (key === shownDocs) return;
@@ -512,6 +515,82 @@
   filterInput.addEventListener('input', () => {
     filterText = filterInput.value.trim().toLowerCase();
     if (lastData) render(lastData);
+  });
+
+  // -- Cleanup files (decision of 2026-10-19) ----------------------------------
+  // In the header of the documents without a known session: unmanage in one
+  // batch those a batch may take, after a confirmation that counts them. Why
+  // one is protected is the daemon's answer (`protected`): the page keeps no
+  // copy of the rule. Only the documents shown when the user confirms are
+  // sent; the daemon deletes their files later, if nobody touched them.
+  const cleanupDialog = $('cleanup');
+  const cleanupConfirm = $('cleanup-confirm');
+  const cleanupHint = $('cleanup-hint');
+  let cleanupIds = [];
+
+  function cleanupButton(docs) {
+    const going = docs.filter((doc) => !doc.protected);
+    const node = plain('Cleanup files', 'cleanup', going.length
+      ? 'Unmanage the ' + plural(going.length, 'document') + ' of this group a cleanup may take; ' +
+        'their files are deleted later, unless written again'
+      : 'Nothing to clean up: a session is on each document here, notes wait, or its file is missing',
+    () => openCleanup(docs));
+    node.disabled = !going.length;
+    return node;
+  }
+
+  function openCleanup(docs) {
+    const going = docs.filter((doc) => !doc.protected);
+    const staying = docs.length - going.length;
+    const days = lastData && lastData.cleanup_after_days;
+    cleanupIds = going.map((doc) => doc.id);
+    $('cleanup-text').textContent = plural(going.length, 'document') +
+      (going.length === 1 ? ' leaves' : ' leave') + ' the list now, with ' +
+      'the notes already sent on them. Their files stay on disk' +
+      (days ? ' for ' + days + ' days' : '') + ', then the daemon deletes them, unless they are ' +
+      'written again or listed again before.';
+    const list = $('cleanup-list');
+    list.textContent = '';
+    for (const doc of going.slice(0, 8)) {
+      const item = make('li', '', (doc.title || doc.path) + ' ');
+      item.append(make('span', 'mono', shortPath(doc)));
+      list.append(item);
+    }
+    if (going.length > 8) list.append(make('li', '', '… and ' + (going.length - 8) + ' more'));
+    $('cleanup-kept').textContent = staying ? plural(staying, 'protected document') +
+      (staying === 1 ? ' stays' : ' stay') +
+      ': a session is on it, notes wait, or its file is missing.' : '';
+    cleanupConfirm.textContent = 'Unmanage ' + plural(going.length, 'document');
+    cleanupConfirm.disabled = false;
+    cleanupHint.className = 'hint';
+    cleanupHint.textContent = 'Nothing is deleted now.';
+    cleanupDialog.showModal();
+    cleanupConfirm.focus();
+  }
+
+  $('cleanup-cancel').addEventListener('click', () => cleanupDialog.close());
+  cleanupDialog.addEventListener('click', (e) => { if (e.target === cleanupDialog) cleanupDialog.close(); });
+  cleanupDialog.addEventListener('close', () => {
+    cleanupIds = [];
+    if (lastData) render(lastData);
+  });
+  cleanupConfirm.addEventListener('click', async () => {
+    if (busy || !cleanupIds.length) return;
+    busy = true;
+    cleanupConfirm.disabled = true;
+    try {
+      const answer = await call('POST', '/api/cleanup', { ids: cleanupIds });
+      cleanupDialog.close();
+      say(answer.message, false);
+    } catch (err) {
+      // The toast lies under the modal dialog: the error is shown in it.
+      cleanupHint.className = 'hint problem';
+      cleanupHint.textContent = err.message;
+    } finally {
+      busy = false;
+      cleanupConfirm.disabled = false;
+      await refresh();
+    }
   });
 
   // -- the session picker -----------------------------------------------------

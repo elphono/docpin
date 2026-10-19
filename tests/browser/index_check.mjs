@@ -28,7 +28,7 @@ try {
   page.on('dialog', async (d) => { dialogs.push(d.message()); await d.accept(); });
   await page.goto(base + '/');
   await page.waitForSelector('section .doc');
-  await page.waitForFunction(() => document.querySelectorAll('.doc').length === 6);
+  await page.waitForFunction(() => document.querySelectorAll('.doc').length === 8);
 
   const heads = await page.locator('#groups .group h3').allTextContents();
   if (heads.length !== 4 || !heads.includes('Live session') || !heads.includes('Other session') ||
@@ -77,7 +77,7 @@ try {
   if (!(await row('Foxtrot').locator('.badge.danger').count())) fail('no missing-file badge');
   step('states at a glance: ' + JSON.stringify(classes));
   const stats = await page.locator('#overview .value').allTextContents();
-  if (JSON.stringify(stats) !== '["6","1","1"]') fail('overview: ' + JSON.stringify(stats));
+  if (JSON.stringify(stats) !== '["8","1","1"]') fail('overview: ' + JSON.stringify(stats));
   step('overview: documents, notes to send, sessions open = ' + stats.join(', '));
   if ((await row('Alpha').getByRole('button', { name: 'Send to session' }).getAttribute('class')) !== 'primary' ||
       (await row('Charlie').getByRole('button', { name: 'Send to session' }).getAttribute('class')) === 'primary') {
@@ -109,7 +109,7 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('.doc').length === 1 &&
     document.querySelector('.doc').textContent.includes('Alpha'));
   await page.locator('#show-all').click();
-  await page.waitForFunction(() => document.querySelectorAll('.doc').length === 6);
+  await page.waitForFunction(() => document.querySelectorAll('.doc').length === 8);
   step('filter by text, and "Notes to send" shows Alpha alone');
 
   // Attach Bravo, which has no known session, through the picker.
@@ -278,7 +278,7 @@ try {
   await page.locator('#filter').fill('o');
   await page.locator('#filter').fill('');
   await page.waitForFunction(() => !document.querySelector('#groups [data-before]') &&
-    document.querySelectorAll('#groups .group').length === 3);
+    document.querySelector('#groups .group'));
   await foldedState();
   step('a redraw keeps them folded');
   await page.evaluate(() => document.getElementById('toast').classList.remove('show'));
@@ -317,6 +317,51 @@ try {
   if (!(await bareOther.evaluate((n) => n.classList.contains('folded')))) fail('no storage: not folded');
   await bare.close();
   step('without storage, a group folds and stays folded across a redraw');
+
+  // Cleanup files (2026-10-19), in the header of the documents without a
+  // session: Golf goes; Hotel, delivered (the session is on it), stays.
+  const unknownGroup = page.locator('#groups .group.unknown');
+  const cleanupButton = unknownGroup.getByRole('button', { name: 'Cleanup files' });
+  if (await cleanupButton.isDisabled()) fail('Cleanup files disabled with a document to clean');
+  if (await page.locator('#groups .group:not(.unknown) .cleanup').count()) fail('Cleanup files in a session group');
+  await unknownGroup.screenshot({ path: join(outDir, 'index-unknown-group.png') });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await unknownGroup.screenshot({ path: join(outDir, 'index-unknown-group-phone.png') });
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await cleanupButton.click();
+  await page.waitForSelector('#cleanup[open]');
+  if (await isFolded(unknownGroup)) fail('the Cleanup button folded the group');
+  const cleanupText = await page.locator('#cleanup-text').textContent();
+  const cleanupItems = await page.locator('#cleanup-list li').allTextContents();
+  const cleanupKept = await page.locator('#cleanup-kept').textContent();
+  const cleanupLabel = await page.locator('#cleanup-confirm').textContent();
+  if (!cleanupText.startsWith('1 document leaves the list now') || !cleanupText.includes('for 30 days') ||
+      JSON.stringify(cleanupItems) !== '["Golf docs/g.html"]' ||
+      !cleanupKept.startsWith('1 protected document stays') || cleanupLabel !== 'Unmanage 1 document') {
+    fail('cleanup confirmation: ' + JSON.stringify([cleanupText, cleanupItems, cleanupKept, cleanupLabel]));
+  }
+  step('Cleanup files asks first, with the count: ' + cleanupLabel + ' | ' + cleanupKept);
+  await page.screenshot({ path: join(outDir, 'index-cleanup.png') });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: join(outDir, 'index-cleanup-dark.png') });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fits(375);
+  await page.screenshot({ path: join(outDir, 'index-cleanup-phone.png') });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.locator('#cleanup-cancel').click();
+  await page.waitForFunction(() => !document.getElementById('cleanup').open);
+  if (!(await page.locator('.doc', { hasText: 'Golf' }).count())) fail('Cancel cleaned up');
+  step('Cancel changes nothing');
+  await cleanupButton.click();
+  await page.waitForSelector('#cleanup[open]');
+  await page.locator('#cleanup-confirm').click();
+  await page.waitForFunction(() => !document.getElementById('cleanup').open &&
+    document.getElementById('message').textContent.startsWith('1 document(s) without a known session unmanaged'));
+  await page.waitForFunction(() => !document.getElementById('groups').textContent.includes('Golf'));
+  if (!(await page.locator('.doc', { hasText: 'Hotel' }).count())) fail('Cleanup took a protected document');
+  if (!(await cleanupButton.isDisabled())) fail('Cleanup files still offered with nothing to clean');
+  step('Cleanup files: ' + (await page.locator('#message').textContent()));
 
   await page.getByRole('button', { name: 'Restart daemon' }).click();
   await page.waitForFunction(() => document.getElementById('message').textContent.startsWith('Restart asked'));

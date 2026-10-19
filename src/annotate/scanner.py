@@ -42,7 +42,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from . import claude, config, folders, registry
+from . import claude, cleanup, config, folders, registry
 
 log = logging.getLogger("annotate")
 
@@ -171,7 +171,7 @@ def prune(days: float, only: str | None = None, now: float | None = None, *,
             return False
         return doc["mtime"] is None or doc["mtime"] <= since
 
-    result = registry.forget_batch(older, listening)
+    result = registry.forget_batch(older, listening, cleanup=False)
     for item in result["forgotten"]:
         log.info("rescan: %s unmanaged, written more than %g day(s) ago", item["path"], days)
     return result
@@ -252,13 +252,20 @@ class CatchUps:
             self.running = None
 
 
-def run(stop: threading.Event, every: float = SCAN_EVERY) -> None:
-    """The daemon's thread: a pass, then a wait that `stop` interrupts. A
-    failing pass is logged and the next one is tried: the scan is a
-    complement, it must never take the daemon down."""
+def run(stop: threading.Event, every: float = SCAN_EVERY,
+        sweeper: cleanup.Sweeper | None = None) -> None:
+    """The daemon's thread: a pass, the deletions "Cleanup files" made due
+    (at most once an hour: cleanup.Sweeper), then a wait that `stop`
+    interrupts. A failing pass or sweep is logged and the next one is tried:
+    neither may take the daemon down."""
+    sweeper = cleanup.Sweeper() if sweeper is None else sweeper
     while not stop.is_set():
         try:
             scan_once()
         except Exception as exc:  # noqa: BLE001 - see the docstring
             log.error("scan failed: %s", exc)
+        try:
+            sweeper.tick()
+        except Exception as exc:  # noqa: BLE001 - see the docstring
+            log.error("cleanup failed: %s", exc)
         stop.wait(every)

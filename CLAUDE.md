@@ -84,10 +84,22 @@ n'a qu'une copie (`registry.protection`, servie à la page dans `protected`) : u
 envoyées, qu'un Unmanage effacerait. La ligne de commande demande au démon (en lecture) qui
 écoute ; sans démon, personne. Le rapport dit ajoutés, retirés, gardés.
 
+**« Cleanup files » vide le groupe « Documents without a known session »** (2026-10-19,
+`cleanup.py`, bouton à droite de l'en-tête de ce groupe, `annotate cleanup`) : après une
+confirmation dans la page qui compte ce qui part et ce qui reste, les documents non protégés de
+ce groupe passent en « Unmanage », en un lot (`POST /api/cleanup`, les ids montrés). **Rien n'est
+effacé au clic** : chaque fichier entre dans `cleanup.json` (date, taille, heure du nettoyage), et
+le démon, au plus une fois par heure dans sa boucle de parcours, efface celui qui n'a pas bougé
+depuis `CLEANUP_AFTER_DAYS` = 30 jours (`ANNOTATE_CLEANUP_AFTER_DAYS` pour les tests, la page lit
+la valeur dans `/api/docs`). Un fichier touché (date ou taille) ou ré-enregistré (hook, parcours,
+rescan, `register` : `registry.register` le retire de l'index) sort de l'index sans être effacé ;
+un fichier hors de l'index ne l'est jamais. `annotate cleanup --list` montre les dates prévues,
+`--run` applique ce qui est dû.
+
 **La page d'accueil (`/`, ouverte d'un clic gauche sur la pastille) porte tous les contrôles
 de la pastille** : par document Open, Send to session, New session, Unmanage, Delete file ; les
 dossiers suivis (ajout avec suggestions, retrait), les dossiers exclus (mêmes suggestions) et
-Rescan ; pour le démon Restart et Stop, demandés à systemd (`service.control`, `--no-block`, refusés si le
+Rescan ; « Cleanup files » dans l'en-tête des documents sans session ; pour le démon Restart et Stop, demandés à systemd (`service.control`, `--no-block`, refusés si le
 démon n'a pas été lancé par systemd). **Start n'y est pas, et ne peut pas y être** : un démon
 arrêté ne sert plus de page où cliquer ; il reste dans la pastille. La page passe par la même
 API que la pastille, avec la même garde (`X-Annotate`, origine locale).
@@ -167,6 +179,7 @@ uv run annotate sessions                 # les conversations auxquelles rattache
 uv run annotate attach <id> <session> [--cwd DIR] | detach <id>
 uv run annotate folders [add|remove|exclude|unexclude <dossier>]   # suivis et exclus
 uv run annotate rescan [--days N] [--folder D]   # rattrape les N derniers jours, retire les plus vieux
+uv run annotate cleanup [--list|--run]           # « Cleanup files », l'index d'effacement, les effacements dus
 uv run annotate serve                    # le démon, au premier plan
 uv run annotate service                  # écrit ~/.config/systemd/user/annotate.service
 uv run annotate tray [--start|--once|--uninstall]   # pastille Windows + raccourci Démarrage
@@ -228,6 +241,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | la liste des sessions ne propose que des conversations reprenables, jamais un sous-agent, les ouvertes d'abord, bornée sans couper une session ouverte | `test_the_list_offers_only_resumable_conversations_and_never_a_subagent`, `test_open_sessions_come_first_then_the_most_recently_active`, `test_the_list_is_bounded_and_never_cuts_an_open_session` |
 | une session se range sous le dépôt qui contient son dossier (sous-dossier et worktree compris), jamais sous un dépôt du home ; les sessions d'un dépôt se regroupent, les documents sans session restent à part, en dernier | `test_each_session_group_names_the_repository_it_works_in`, `test_a_repository_in_the_home_directory_holds_no_session`, `tests/browser/index_check.mjs` |
 | un dépôt ou une session se replie et garde son compte ; un nouveau rendu et un rechargement le gardent replié, le dépliage ne laisse rien dans le stockage ; sans `localStorage`, le repli marche sans erreur | `tests/browser/index_check.mjs` |
+| « Cleanup files » ne prend que les documents sans session montrés, jamais un protégé, et n'efface rien au clic ; le démon n'efface qu'un fichier de l'index, jamais avant 30 jours, jamais un fichier touché (date ou taille) ni ré-enregistré, au plus une fois par heure ; une entrée illisible n'est jamais effacée ; un fichier déjà disparu sort de l'index sans erreur | `tests/test_cleanup.py`, `test_cleanup_files_from_the_page_unmanages_what_it_showed_and_deletes_nothing`, `test_cleanup_files_from_the_page_keeps_the_document_a_session_waits_for`, `tests/browser/index_check.mjs`, et les mutations `cleanup-*` de `tools/mutate.py` |
 | la copie de référence est prise à chaque envoi, jamais à côté du document ; un envoi refusé la garde, une copie impossible la retire | `test_a_send_keeps_the_document_as_it_was_as_the_reference`, `test_a_refused_send_keeps_the_previous_reference`, `test_a_reference_that_cannot_be_written_is_removed_and_said`, `test_the_reference_never_lives_next_to_the_document` |
 | référence identique au fichier → rien de dessiné ; un ajout, une modification, un retrait → une marque chacun ; une PARTIE neuve (le plus haut élément qui ne tient que des blocs neufs : liste, tableau, carte) n'en porte qu'une et rien dedans n'en reçoit (classe, étiquette, étape ▲ ▼, ligne du panneau, compteurs), un conteneur dont au moins deux enfants directs sont ou contiennent un titre se scindant en eux (grille de cartes) ; un élément neuf d'une liste ancienne, un bloc sous un bloc MODIFIÉ gardent la leur ; le fond propre d'un bloc marqué reste lisible sous la teinte ; aucune étiquette n'en couvre une autre, et celle d'un bloc est sur son bord haut, au-dessus de son texte (dans son padding s'il en a, au bout du bloc si la ligne du dessus est prise) ; une section qui porte une note non envoyée ne se replie jamais ; rien ne se replie si un changement n'a pas été retrouvé ; le repli ne déplace aucune ancre | `tests/browser/changes_check.mjs` |
 | hors WSL, le navigateur et l'onglet passent par les outils de la plateforme (`xdg-open`, `open`, terminal natif, ou le `terminal` de `config.toml`), jamais par ceux de Windows ; sans workspace, les `docs/` du home sont des documents, mais le home n'est jamais parcouru | `tests/test_platforms.py` |

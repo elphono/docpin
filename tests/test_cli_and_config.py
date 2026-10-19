@@ -211,6 +211,34 @@ def test_a_rescan_from_the_command_line_keeps_what_a_session_waits_for(daemon, m
     waiter.join(5)
 
 
+def test_cleanup_from_the_command_line_lists_and_runs_the_deletions(make_doc, capsys,
+                                                                   monkeypatch):
+    import time
+
+    from annotate import cleanup
+    monkeypatch.setenv("ANNOTATE_PORT", str(_free_port()))   # no daemon: nobody listens
+    path = make_doc("<p>x</p>", name="orphan.html")
+    registry.register(path, session="")
+    registry.register(make_doc("<p>y</p>", name="owned.html"), session="s-1")
+    assert cli.main(["cleanup", "--list"]) == 0
+    assert capsys.readouterr().out == "no file waits for deletion\n"
+    assert cli.main(["cleanup"]) == 0
+    due = cleanup.day_of(time.time() + 30 * cleanup.DAY)
+    assert capsys.readouterr().out.startswith(
+        f"1 document(s) without a known session unmanaged; their files are deleted on {due}")
+    assert cli.main(["cleanup", "--list"]) == 0
+    assert capsys.readouterr().out.startswith(f"deleted on {due}  (cleaned ")
+    assert cli.main(["cleanup", "--run"]) == 0                # not due: nothing deleted
+    assert "0 file(s) deleted" in capsys.readouterr().out and path.exists()
+    index = json.loads(registry.cleanup_path().read_text())
+    index["files"][str(path)]["cleaned_at"] -= 31 * cleanup.DAY  # a month went by
+    registry.cleanup_path().write_text(json.dumps(index))
+    assert cli.main(["cleanup", "--run"]) == 0
+    assert capsys.readouterr().out == (f"deleted {path}\n1 file(s) deleted, 0 kept (touched "
+                                       f"or listed again since their cleanup, or gone)\n")
+    assert not path.exists() and len(registry.all_docs()) == 1
+
+
 def test_register_for_the_hook_refuses_a_document_under_an_excluded_folder(
         tmp_path, capsys, monkeypatch):
     from annotate import folders

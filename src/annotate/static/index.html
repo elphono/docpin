@@ -197,6 +197,12 @@
   .group.folded > .doc, .repo.folded > .repo-sessions { display: none; }
   .group.folded > .group-head { border-bottom: 0; border-radius: calc(var(--radius) - 1px); }
   .group-advice { flex: 1 1 220px; }
+  .chip:not(.mono) { white-space: nowrap; }
+  @media (max-width: 479px) {
+    /* The tools keep the top right corner; title and facts take the width under them. */
+    .group-tools { grid-row: 1; }
+    .group h3, .group-meta { grid-column: 2 / -1; }
+  }
 
   .doc { position: relative; padding: 12px 16px 12px 19px; border-top: 1px solid var(--line);
          display: grid; gap: 8px 16px; grid-template-columns: minmax(0, 1fr); }
@@ -314,7 +320,18 @@
                   padding: 0; border: 1px solid var(--line); border-radius: 14px;
                   background: var(--paper); color: var(--ink); box-shadow: var(--shadow-pop); }
   dialog#picker[open] { display: flex; flex-direction: column; }
-  dialog#picker::backdrop { background: rgba(9, 12, 17, .45); }
+  dialog#picker::backdrop, dialog#cleanup::backdrop { background: rgba(9, 12, 17, .45); }
+  dialog#cleanup { width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px);
+                   padding: 0; border: 1px solid var(--line); border-radius: 14px;
+                   background: var(--paper); color: var(--ink); box-shadow: var(--shadow-pop); }
+  dialog#cleanup[open] { display: flex; flex-direction: column; }
+  #cleanup-list { margin: 0; padding: 10px 16px 4px 34px; overflow-y: auto; display: grid; gap: 4px;
+                  font-size: 14px; }
+  #cleanup-list li { overflow-wrap: anywhere; }
+  #cleanup-list .mono { color: var(--faint); }
+  .cleanup-kept { margin: 0; padding: 4px 16px 12px; font-size: 13px; color: var(--muted); }
+  .cleanup-kept:empty { display: none; }
+  .group-tools .cleanup { padding: 6px 10px; }
   .picker-head { padding: 16px 16px 10px; display: grid; gap: 2px; border-bottom: 1px solid var(--line); }
   .picker-head h2 { margin: 0; font-size: 16px; }
   .picker-head p { margin: 0; font-size: 13px; color: var(--muted); overflow-wrap: anywhere; }
@@ -477,6 +494,19 @@
     <span class="hint" id="picker-hint">&uarr; &darr; to move, Enter to attach, Esc to close</span>
     <button type="button" id="picker-detach" class="ghost danger">Detach</button>
     <button type="button" id="picker-cancel">Cancel</button>
+  </div>
+</dialog>
+<dialog id="cleanup" aria-labelledby="cleanup-title">
+  <div class="picker-head">
+    <h2 id="cleanup-title">Clean up the documents without a known session</h2>
+    <p id="cleanup-text"></p>
+  </div>
+  <ul id="cleanup-list"></ul>
+  <p id="cleanup-kept" class="cleanup-kept"></p>
+  <div class="picker-foot">
+    <span class="hint" id="cleanup-hint">Nothing is deleted now.</span>
+    <button type="button" id="cleanup-cancel">Cancel</button>
+    <button type="button" id="cleanup-confirm" class="primary">Unmanage</button>
   </div>
 </dialog>
 <script src="/static/index.js"></script>
