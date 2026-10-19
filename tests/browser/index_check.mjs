@@ -250,6 +250,74 @@ try {
   if (!(await page.locator('.doc', { hasText: 'Foxtrot' }).count())) fail('the rescan took a protected document');
   step('rescan: ' + (await page.locator('#scan-state').textContent()));
 
+  // Folding (2026-10-19): a session group (its chevron) and a repository
+  // section (its header) fold, keep their count, and stay folded across a
+  // redraw and a reload; unfolded, nothing is left in the storage.
+  const other = group('Other session');
+  const repoBox = page.locator('#groups > .repo', { has: page.locator('h2', { hasText: /^repo$/ }) });
+  const isFolded = (loc) => loc.evaluate((n) => n.classList.contains('folded'));
+  const counts = async () => (await other.locator('.group-meta .chip', { hasText: 'document' }).textContent()).trim()
+    + ' | ' + (await repoBox.locator('.repo-facts').textContent()).trim();
+  const open = await counts();
+  if (!open.startsWith('1 document | ') || !/^1 document \| \d+ sessions? · \d+ documents?$/.test(open)) {
+    fail('counts before folding: ' + open);
+  }
+  const foldedState = async () => {
+    if (!(await isFolded(other)) || !(await isFolded(repoBox))) fail('not folded any more');
+    if (await other.locator('.doc').first().isVisible()) fail('a folded group still shows its documents');
+    if (await repoBox.locator('.repo-sessions').isVisible()) fail('a folded repository still shows its sessions');
+    const shown = await counts();
+    if (shown !== open) fail('folded counts: ' + shown + ', open: ' + open);
+    if (await other.locator('.fold-toggle').getAttribute('aria-expanded') !== 'false') fail('aria-expanded');
+    return shown;
+  };
+  await other.locator('.fold-toggle').click();
+  await repoBox.locator('.repo-head h2').click();                 // the header itself
+  step('folded, the counts stay: ' + (await foldedState()));
+  await page.evaluate(() => { document.querySelector('#groups > *').dataset.before = 'redraw'; });
+  await page.locator('#filter').fill('o');
+  await page.locator('#filter').fill('');
+  await page.waitForFunction(() => !document.querySelector('#groups [data-before]') &&
+    document.querySelectorAll('#groups .group').length === 3);
+  await foldedState();
+  step('a redraw keeps them folded');
+  await page.evaluate(() => document.getElementById('toast').classList.remove('show'));
+  await page.screenshot({ path: join(outDir, 'index-folded.png'), fullPage: true });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: join(outDir, 'index-folded-dark.png'), fullPage: true });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fits(375);
+  await page.screenshot({ path: join(outDir, 'index-folded-phone.png'), fullPage: true });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.reload();
+  await page.waitForSelector('#groups .group');
+  await foldedState();
+  step('a reload keeps them folded (localStorage)');
+  await other.locator('.fold-toggle').click();
+  await repoBox.locator('.repo-head .fold-toggle').click();
+  if ((await isFolded(other)) || (await isFolded(repoBox)) ||
+      !(await other.locator('.doc', { hasText: 'Echo' }).isVisible())) fail('unfold');
+  const kept = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('docpin.folded.')));
+  if (kept.length) fail('storage after unfolding: ' + JSON.stringify(kept));
+  step('unfolded: the documents are back, nothing left in the storage');
+
+  // Without storage (private window, blocked site data): folding still works.
+  const bare = await browser.newPage({ viewport: { width: 1100, height: 900 } });
+  bare.on('pageerror', (e) => errors.push('no storage: ' + e.message));
+  await bare.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get() { throw new Error('storage denied'); } });
+  });
+  await bare.goto(base + '/');
+  await bare.waitForSelector('#groups .group');
+  const bareOther = bare.locator('#groups .group', { has: bare.locator('h3', { hasText: 'Other session' }) });
+  await bareOther.locator('.fold-toggle').click();
+  await bare.locator('#filter').fill('o');
+  await bare.locator('#filter').fill('');
+  if (!(await bareOther.evaluate((n) => n.classList.contains('folded')))) fail('no storage: not folded');
+  await bare.close();
+  step('without storage, a group folds and stays folded across a redraw');
+
   await page.getByRole('button', { name: 'Restart daemon' }).click();
   await page.waitForFunction(() => document.getElementById('message').textContent.startsWith('Restart asked'));
   await page.getByRole('button', { name: 'Stop daemon' }).click();

@@ -129,8 +129,9 @@
   #groups { display: grid; gap: 28px; }
   /* A repository gathers its sessions: a heading, then their cards hung on a rail. */
   .repo { display: grid; gap: 10px; min-width: 0; }
-  .repo-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 0 10px;
+  .repo-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 0 10px;
                align-items: center; padding: 0 2px; }
+  .repo-head .fold-toggle { grid-column: 4; grid-row: 1 / span 2; }
   .repo-icon { grid-row: 1 / span 2; width: 32px; height: 32px; border-radius: 9px;
                display: grid; place-items: center; background: var(--ink); color: var(--paper); }
   .repo-icon svg { width: 18px; height: 18px; }
@@ -145,6 +146,8 @@
   .repo-sessions { display: grid; gap: 14px; margin-left: 15px; padding-left: 15px;
                    border-left: 2px solid var(--line-strong); min-width: 0; }
   @media (max-width: 479px) {
+    .repo-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .repo-head .fold-toggle { grid-column: 3; grid-row: 1 / span 3; }
     .repo-facts { grid-column: 2; grid-row: auto; }
     .repo-icon { grid-row: 1 / span 3; }
     .repo-sessions { margin-left: 4px; padding-left: 10px; }
@@ -157,10 +160,13 @@
                 --tone-line: color-mix(in srgb, var(--live) 35%, transparent); }
   .group.unknown { --tone: var(--faint); --tone-text: var(--muted); --tone-soft: var(--raised);
                    --tone-line: var(--line-strong); border-style: dashed; border-color: var(--line-strong); }
-  .group-head { padding: 14px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr);
+  .group-head { padding: 14px 16px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto;
                 gap: 2px 12px; align-items: start; background: var(--tone-soft);
                 border-bottom: 1px solid var(--tone-line);
                 border-radius: calc(var(--radius) - 1px) calc(var(--radius) - 1px) 0 0; }
+  .group-kicker, .group h3, .group-meta { grid-column: 2; }
+  .group-tools { grid-column: 3; grid-row: 1 / span 3; display: flex; flex-wrap: wrap;
+                 justify-content: flex-end; align-items: flex-start; gap: 6px; }
   .group-icon { grid-row: 1 / span 3; width: 38px; height: 38px; border-radius: 10px;
                 display: grid; place-items: center; background: var(--tone); color: #fff;
                 box-shadow: var(--shadow); }
@@ -181,6 +187,16 @@
           color: var(--muted); line-height: 1.6; }
   .chip svg { width: 13px; height: 13px; flex: none; color: var(--tone-text); }
   .chip.mono { font-size: 12px; overflow-wrap: anywhere; }
+  /* Folding: the header is the handle; folded, it keeps its count. */
+  .foldable { cursor: pointer; }
+  .fold-toggle { width: 32px; height: 32px; padding: 0; display: grid; place-items: center;
+                 border-color: transparent; background: transparent; color: var(--muted); }
+  .fold-toggle:hover { background: var(--sunken); border-color: var(--line-strong); color: var(--ink); }
+  .fold-toggle svg { width: 18px; height: 18px; transition: transform .15s; }
+  .folded > header .fold-toggle svg { transform: rotate(-90deg); }
+  .group.folded > .doc, .repo.folded > .repo-sessions { display: none; }
+  .group.folded > .group-head { border-bottom: 0; border-radius: calc(var(--radius) - 1px); }
+  .group-advice { flex: 1 1 220px; }
 
   .doc { position: relative; padding: 12px 16px 12px 19px; border-top: 1px solid var(--line);
          display: grid; gap: 8px 16px; grid-template-columns: minmax(0, 1fr); }

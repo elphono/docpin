@@ -260,6 +260,7 @@
     doc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
     repo: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/>'
       + '<path d="M6 8.5v7M18 10.5c0 4-6 3-11 5.5"/>',
+    chevron: '<path d="M6 9l6 6 6-6"/>',
   };
 
   function icon(name) {
@@ -275,6 +276,60 @@
     node.append(icon(name), text);
     if (title) node.title = title;
     return node;
+  }
+
+  // -- folding (decision of 2026-10-19) -------------------------------------
+  // A repository section and a session group fold on a click on their
+  // header (or its chevron); folded, the header keeps its count. Open by
+  // default, remembered per browser in localStorage, one key per repository
+  // and per session. The page must work without storage (private window,
+  // blocked site data): every access is guarded, and memory keeps the state
+  // for as long as the page lives, redraws included.
+  const FOLD_KEY = 'docpin.folded.';
+  const folds = new Map();
+
+  function isFolded(key) {
+    if (!folds.has(key)) {
+      let stored = false;
+      try { stored = window.localStorage.getItem(FOLD_KEY + key) === '1'; } catch (err) { stored = false; }
+      folds.set(key, stored);
+    }
+    return folds.get(key);
+  }
+
+  function setFolded(key, value) {
+    folds.set(key, value);
+    try {
+      if (value) window.localStorage.setItem(FOLD_KEY + key, '1');
+      else window.localStorage.removeItem(FOLD_KEY + key);
+    } catch (err) { /* memory only */ }
+  }
+
+  function foldable(section, head, key, what) {
+    const toggle = make('button', 'fold-toggle');
+    toggle.type = 'button';
+    toggle.append(icon('chevron'));
+    const show = (folded) => {
+      section.classList.toggle('folded', folded);
+      toggle.setAttribute('aria-expanded', String(!folded));
+      toggle.setAttribute('aria-label', (folded ? 'Unfold ' : 'Fold ') + what);
+      toggle.title = folded ? 'Unfold' : 'Fold';
+    };
+    const flip = () => {
+      const folded = !section.classList.contains('folded');
+      setFolded(key, folded);
+      show(folded);
+    };
+    show(isFolded(key));
+    toggle.addEventListener('click', (e) => { e.stopPropagation(); flip(); });
+    head.classList.add('foldable');
+    head.addEventListener('click', (e) => {
+      // A button or a link of the header does its own job.
+      if (e.target instanceof Element && e.target.closest('button, a, input, details')) return;
+      if (window.getSelection && String(window.getSelection())) return;   // selecting text
+      flip();
+    });
+    return toggle;
   }
 
   function groupCard(group, docs) {
@@ -300,10 +355,14 @@
       meta.append(chip('id', group.session_id.slice(0, 8), 'mono', group.session_id));
       meta.append(chip('doc', plural(docs.length, 'document')));
     } else {
-      meta.textContent = 'Attach each one to its conversation: otherwise Send to session ' +
-        'opens a new one.';
+      // The count stays in sight when the group is folded.
+      meta.append(chip('doc', plural(docs.length, 'document')), make('span', 'group-advice',
+        'Attach each one to its conversation: otherwise Send to session opens a new one.'));
     }
-    head.append(badge, kicker, make('h3', '', group.title), meta);
+    const tools = make('div', 'group-tools');
+    tools.append(foldable(section, head, 'session:' + group.session_id,
+      known ? 'the session ' + group.title : 'the documents without a known session'));
+    head.append(badge, kicker, make('h3', '', group.title), meta, tools);
     section.append(head);
     for (const doc of docs) section.append(docRow(doc));
     return section;
@@ -321,7 +380,9 @@
     if (!repo.is_repo) kicker.title = 'No git repository holds this folder';
     const facts = make('span', 'repo-facts',
       plural(sessions, 'session') + ' · ' + plural(documents, 'document'));
-    head.append(mark, kicker, name, facts);
+    const toggle = foldable(section, head, 'repo:' + repo.key,
+      (repo.is_repo ? 'the repository ' : 'the folder ') + repo.label);
+    head.append(mark, kicker, name, facts, toggle);
     const body = make('div', 'repo-sessions');
     body.append(...cards);
     section.append(head, body);
@@ -414,7 +475,7 @@
       const key = group.repo || group.session_id;
       if (!repos.has(key)) {
         repos.set(key, { repo: { path: group.repo, label: group.repo_label || group.folder,
-                                 is_repo: group.is_repo }, cards: [], documents: 0 });
+                                 is_repo: group.is_repo, key }, cards: [], documents: 0 });
         items.push(repos.get(key));
       }
       const bucket = repos.get(key);
