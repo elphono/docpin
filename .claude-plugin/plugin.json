@@ -1,7 +1,7 @@
 {
   "name": "docpin",
   "displayName": "docpin",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Pin notes on the HTML documents Claude Code writes, in your browser; the notes flow back to the live session that wrote them",
   "author": {"name": "elphono", "url": "https://github.com/elphono"},
   "homepage": "https://github.com/elphono/docpin",

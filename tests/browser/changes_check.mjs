@@ -1,20 +1,20 @@
 // Drives "what changed since the last send" in a real headless Chromium.
 //
 //   node changes_check.mjs <playwright-dir> <base-url> <doc-id> <out-dir> <doc-path> \
-//        <nested-doc-id> <mixed-doc-id> <siblings-doc-id>
+//        <nested-doc-id> <mixed-doc-id> <siblings-doc-id> <lists-doc-id>
 //
 // The Python side (tests/test_browser.py) sent version A of the document,
 // wrote version B, and checks afterwards what reached the server. First the
 // pure comparison (diff.js) on crafted pairs, then the page as the reader
-// sees it, then three documents of blocks inside blocks. Each step prints
+// sees it, then four documents of blocks inside blocks. Each step prints
 // one line; any failure exits non-zero.
 import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const [pwDir, base, docId, outDir, docPath, nestedId, mixedId, siblingsId] = process.argv.slice(2);
-if (!nestedId || !mixedId || !siblingsId) {
-  console.error('FAIL the nested, mixed and siblings document ids are missing');
+const [pwDir, base, docId, outDir, docPath, nestedId, mixedId, siblingsId, listsId] = process.argv.slice(2);
+if (!nestedId || !mixedId || !siblingsId || !listsId) {
+  console.error('FAIL the nested, mixed, siblings and lists document ids are missing');
   process.exit(1);
 }
 const require = createRequire(join(pwDir, 'package.json'));
@@ -253,15 +253,21 @@ try {
         if (tags.some((t) => cross(t, rect))) found.push('tag on "' + n.data.trim().slice(0, 24) + '"');
       }
     }
-    // Each mark has its tag over the left part of its block, above its text:
-    // on the top edge of a padded block (not wholly above it, on the block
-    // before, as in 0.4.0), just above a block without padding.
+    // Each mark has its tag at the top of its block, above its text: on the
+    // top edge of a padded block (not wholly above it, on the block before, as
+    // in 0.4.0), just above a block without padding; on its left part.
     for (const block of document.querySelectorAll('.annotate-new, .annotate-changed')) {
       const b = block.getBoundingClientRect();
       const s = getComputedStyle(block);
       const room = parseFloat(s.borderTopWidth) + parseFloat(s.paddingTop);
       const low = room > 2 ? b.top + 1 : b.top - 2;
-      const own = tags.some((t) => t.left >= b.left - 1 && t.left <= b.left + Math.min(30, b.width / 2) &&
+      // A tag may have slid right past the one before it, on the same row, or
+      // gone to the right end of its block when the line above is taken there.
+      const slid = (t) => tags.some((o) => o !== t && Math.abs(o.top - t.top) < 17 &&
+        t.left >= o.right && t.left <= o.right + 6);
+      const atEnd = (t) => t.right <= b.right && t.right >= b.right - 10;
+      const own = tags.some((t) => t.left >= b.left - 1 &&
+        (t.left <= b.left + Math.min(30, b.width / 2) || slid(t) || atEnd(t)) &&
         t.bottom > low && t.bottom <= b.top + room + 0.5);
       if (!own) found.push('no tag on the top edge of "' + block.textContent.trim().slice(0, 24) + '"');
     }
@@ -294,6 +300,12 @@ try {
       !nest.bar.includes(' · 4 changes')) fail('nested panel: ' + JSON.stringify(nest));
   // A card's own text is its number: its row reads by all its text.
   if (!nest.rows[1].includes('1 Offline reading Pages stay')) fail('card row: ' + nest.rows[1]);
+  // The tint lies over a marked block's own background, which stays (light: #f8fafc).
+  const cardLook = await page.evaluate(() => {
+    const s = getComputedStyle(document.querySelector('.card'));
+    return s.backgroundColor + ' | ' + (s.boxShadow.includes('inset') ? 'tinted' : 'not tinted');
+  });
+  if (cardLook !== 'rgb(248, 250, 252) | tinted') fail('a marked card lost its background: ' + cardLook);
   const nestGeo = await overlaps();
   if (nestGeo.tags !== 4 || nestGeo.found.length) fail('nested tags placed: ' + JSON.stringify(nestGeo));
   step('nested: 4 marks (h2 + 3 cards), nothing inside a card, panel 4 new');
@@ -365,24 +377,53 @@ try {
   await shoot('mixed-phone.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
   step('mixed: no tag on a tag or on text, at 1100 and 375 px');
 
-  // 13. Sibling blocks in a card that is no block (a dot, a title, two
-  // paragraphs in an <article>): none of their tags on another, each on its block.
+  // 13. A whole new list or table is one part; a new item in an old list is its
+  // own; a lone new paragraph in a new wrapper keeps the mark; a new section
+  // whose h2 sits beside a grid of cards splits into them.
+  await settled(listsId);
+  const lists = await drawn();
+  const expectLists = ['ul:Alpha item to do.', 'li:Third step, added.', 'table:Name',
+    'p:A lone new paragraph in a new wrapper.', 'h2:Wrapped part', 'div:1', 'div:2'];
+  if (lists.news.join('|') !== expectLists.join('|') || lists.changed.length ||
+      lists.counts !== '7new,0changed,0removed' || lists.nav !== '– / 7' || !lists.bar.includes(' · 7 changes')) {
+    fail('lists: ' + JSON.stringify(lists));
+  }
+  const inner = await page.evaluate(() => document.querySelectorAll(
+    '.annotate-new [class*="annotate-"], div.note.annotate-new').length);
+  if (inner) fail(inner + ' marks inside a new list, table or card, or on the wrapper');
+  const listGeo = await overlaps();
+  if (listGeo.tags !== 7 || listGeo.found.length) fail('lists tags placed: ' + JSON.stringify(listGeo));
+  await shoot('lists-light.png', 'main > h2:nth-of-type(1)', 'main > section');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await shoot('lists-dark.png', 'main > h2:nth-of-type(1)', 'main > section');
+  await page.emulateMedia({ colorScheme: 'light' });
+  step('lists: one mark per new list, table and card, one on the new item of an old list');
+
+  // 14. The cards of the capture: sibling blocks in an <article>, which is no
+  // block. A new card is one part: the h2 and one mark per card, none inside.
   await settled(siblingsId);
+  const sib = await drawn();
+  if (sib.news.join('|') !== 'h2:Planned improvements|article:1|article:2' || sib.changed.length ||
+      sib.counts !== '3new,0changed,0removed' || sib.nav !== '– / 3' || !sib.bar.includes(' · 3 changes')) {
+    fail('sibling cards: ' + JSON.stringify(sib));
+  }
+  if (await page.evaluate(() => document.querySelectorAll('article [class*="annotate-"]').length)) {
+    fail('a block inside a new card is marked');
+  }
+  const dotLook = await page.evaluate(() => getComputedStyle(document.querySelector('.dot')).backgroundColor +
+    ' | ' + getComputedStyle(document.querySelector('article')).backgroundColor);
+  if (dotLook !== 'rgb(14, 116, 144) | rgb(248, 250, 252)') fail('backgrounds under a mark: ' + dotLook);
   for (const width of [1100, 375]) {
     await page.setViewportSize({ width, height: 800 });
     await frames();
     const geo = await overlaps();
-    // How many marks such siblings deserve is not settled here, only where
-    // their tags go; they may cover the block above, the 0.4.0 place for a
-    // block without padding.
-    const kept = geo.found.filter((f) => !f.startsWith('tag on "'));
-    if (!geo.tags || kept.length) fail('sibling tags at ' + width + ' px: ' + JSON.stringify(geo));
+    if (geo.tags !== 3 || geo.found.length) fail('sibling tags at ' + width + ' px: ' + JSON.stringify(geo));
   }
   await shoot('siblings-phone.png', 'main > h2:nth-of-type(2)', '.grid');
   await page.setViewportSize({ width: 1100, height: 800 });
   await frames();
   await shoot('siblings-light.png', 'main > h2:nth-of-type(2)', '.grid');
-  step('siblings: no tag on another tag, each on its own block, at 1100 and 375 px');
+  step('siblings: h2 + one mark per <article> card, none inside, dot and card keep their colour');
   if (errors.length) fail('page errors: ' + errors.join(' | '));
 } finally {
   await browser.close();

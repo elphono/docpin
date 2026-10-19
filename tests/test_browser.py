@@ -210,7 +210,8 @@ NESTED_STYLE = (
     ".card header{display:flex;align-items:center;gap:10px}.card h3{margin:0;font-size:19px}"
     ".num{flex:none;width:34px;height:34px;border-radius:50%;background:#0e7490;color:#fff;"
     "font-weight:700;display:grid;place-items:center}.dot{width:28px;height:28px}"
-    ".card p{margin:6px 0 0}.card p+p{font-size:14.5px;color:var(--muted)}</style>")
+    ".card p{margin:6px 0 0}.card p+p{font-size:14.5px;color:var(--muted)}"
+    ".box h3{margin:0 0 6px}table{border-collapse:collapse}td,th{padding:4px 10px}</style>")
 NESTED_A = (
     NESTED_STYLE + "<main><h1>Nested check</h1><p>An intro paragraph that stays.</p>"
     "<h2>Context</h2><p>Context paragraph one.</p><p>Context paragraph two.</p>"
@@ -248,9 +249,9 @@ MIXED_B = (MIXED_A
            .replace("<div class='box'><p>Scope covers the north and south sites.</p>",
                     "<div class='box'>Extended this week"
                     "<p>Scope covers the north and west sites.</p>"))
-# The same cards built of SIBLING blocks in a card that is no block (an
-# <article>): a round numbered dot next to the title, two paragraphs under.
-# Checked for where the tags go only (none on another).
+# The cards of the capture: SIBLING blocks in a card that is no block (an
+# <article>), a round numbered dot next to the title, two paragraphs under.
+# A new card is one part: one mark on the article, none inside.
 SIBLING_CARD = ("<article class='card'><header><div class='num dot'>{0}</div>"
                 "<h3>{1}</h3></header><p>{2}</p><p>{3}</p></article>")
 SIBLINGS_B = NESTED_A.replace("<h2>What stays manual</h2>", (
@@ -260,6 +261,32 @@ SIBLINGS_B = NESTED_A.replace("<h2>What stays manual</h2>", (
     + SIBLING_CARD.format(2, "Shared highlights", "Two readers see each other's marks.",
                           "Later: compare the marks of two readers side by side.")
     + "</div><h2>What stays manual</h2>"))
+# Lists and tables: a whole new one is one part, a new item in an old one is
+# its own; a lone new paragraph in a new wrapper keeps the mark on itself; a
+# new <section> whose h2 sits beside a grid of cards splits into them.
+LISTS_A = (
+    NESTED_STYLE + "<main><h1>Lists check</h1><p>An intro paragraph that stays.</p>"
+    "<h2>Tasks</h2><p>Tasks stay as they were.</p>"
+    "<h2>Steps</h2><ul><li>First step, kept.</li><li>Second step, kept.</li></ul>"
+    "<h2>Figures</h2><p>Figures stay as they were.</p>"
+    "<h2>Notes</h2><p>Notes stay as they were.</p></main>")
+LISTS_B = (LISTS_A
+           .replace("<p>Tasks stay as they were.</p>",
+                    "<p>Tasks stay as they were.</p><ul><li>Alpha item to do.</li>"
+                    "<li>Beta item to do.</li><li>Gamma item to do.</li></ul>")
+           .replace("<li>Second step, kept.</li>",
+                    "<li>Second step, kept.</li><li>Third step, added.</li>")
+           .replace("<p>Figures stay as they were.</p>",
+                    "<p>Figures stay as they were.</p><table><thead><tr><th>Name</th>"
+                    "<th>Value</th></tr></thead><tbody><tr><td>Speed</td><td>12</td></tr>"
+                    "<tr><td>Load</td><td>3</td></tr></tbody></table>")
+           .replace("<p>Notes stay as they were.</p>",
+                    "<p>Notes stay as they were.</p><div class='note'>"
+                    "<p>A lone new paragraph in a new wrapper.</p></div>"
+                    "<section><h2>Wrapped part</h2><div class='grid'>"
+                    + CARD.format(1, "Export", "Pages leave as files.", "Planned for later.")
+                    + CARD.format(2, "Import", "Files come back as pages.", "Not started.")
+                    + "</div></section>"))
 
 
 @pytest.mark.browser
@@ -286,7 +313,8 @@ def test_changes_in_a_real_browser(tmp_path, make_doc):
     nested_ids = []
     for name, before, after in (("nested.html", NESTED_A, NESTED_B),
                                 ("mixed.html", MIXED_A, MIXED_B),
-                                ("siblings.html", NESTED_A, SIBLINGS_B)):
+                                ("siblings.html", NESTED_A, SIBLINGS_B),
+                                ("lists.html", LISTS_A, LISTS_B)):
         assert after != before
         other = make_doc(before, name=name, title=name)
         other_id = registry.register(other, session="sess-browser")["id"]

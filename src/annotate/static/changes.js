@@ -8,12 +8,20 @@
  * removed markers and old text live in the overlay layer, like the pins.
  *
  * Nothing is drawn when nothing changed (the witness), and nothing folds when
- * a change could not be found in the page: folding could hide it. A block
- * inside a new block is not drawn: the topmost new block carries the mark.
+ * a change could not be found in the page: folding could hide it.
+ *
+ * One mark per new PART, not per new block (placeMarks). A block inside a new
+ * block gets no mark of its own. A new block climbs to the highest element
+ * that holds nothing but new blocks (a new list, table, card), which carries
+ * the one mark. A group is what a reader takes in as one thing: a container
+ * splits into its direct children when at least two of them are or contain a
+ * heading h1-h6 (a grid of cards, a page), and each child is then a group.
+ * Under a CHANGED block, a new or changed block keeps its own mark.
  */
 (() => {
   'use strict';
   const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
+  const ANY_HEADING = HEADINGS.join(',');
   const LIST_MAX = 8;
   const IGNORED = new Set(['annotate-root', 'script', 'style', 'link', 'annotate-fold']);
 
@@ -73,6 +81,65 @@
     CSS.highlights.set('annotate-added', new Highlight(...ranges));
   }
 
+  // The items to draw, in document order: the removed ones, the changed ones
+  // not inside a new part, one item per new part (an unlocated change is not
+  // here: it is counted, never drawn).
+  function placeMarks(result, located) {
+    const fresh = new Set(located.filter((i) => i.kind === 'new').map((i) => i.target));
+    // One pass: per element, the blocks it holds and how many of them are new.
+    const held = new Map();
+    for (const u of result.units) {
+      if (!u.live) continue;
+      const isNew = fresh.has(u.live);
+      for (let up = u.live; up && up !== document.body; up = up.parentElement) {
+        const c = held.get(up) || { blocks: 0, fresh: 0, one: u.live };
+        c.blocks += 1;
+        if (isNew) c.fresh += 1;
+        held.set(up, c);
+      }
+    }
+    const allNew = (el) => { const c = held.get(el); return Boolean(c) && c.blocks === c.fresh; };
+    const blocks = new Set(result.units.filter((u) => u.live).map((u) => u.live));
+    const titled = (el) => HEADINGS.includes(el.localName) || Boolean(el.querySelector(ANY_HEADING));
+    const split = (el) => {
+      if (blocks.has(el)) return [el];                    // a block with text of its own
+      const kids = [...el.children].filter((c) => held.has(c));
+      if (kids.filter(titled).length >= 2) return kids.flatMap(split);
+      const c = held.get(el);
+      return [c.blocks === 1 ? c.one : el];               // a lone block, not its wrapper
+    };
+    const tops = new Set();
+    for (const node of fresh) {
+      let top = node;
+      for (let up = node.parentElement; up && up !== document.body && allNew(up); up = up.parentElement) top = up;
+      tops.add(top);
+    }
+    const groups = new Set([...tops].flatMap(split));
+    const under = (node) => {
+      for (let up = node.parentElement; up; up = up.parentElement) {
+        if (groups.has(up) || fresh.has(up)) return true;
+      }
+      return false;
+    };
+    const groupOf = (node) => {
+      for (let n = node; n; n = n.parentElement) if (groups.has(n)) return n;
+      return null;
+    };
+    const drawn = [];
+    const shown = new Set();
+    for (const item of located) {
+      if (item.kind === 'removed') { drawn.push(item); continue; }
+      if (item.kind === 'changed') { if (!under(item.target)) drawn.push(item); continue; }
+      const group = groupOf(item.target);
+      if (!group) { drawn.push(item); continue; }
+      if (shown.has(group) || under(group)) continue;
+      shown.add(group);
+      drawn.push(group === item.target ? item : { kind: 'new', change: null, target: group,
+        text: group.innerText.replace(/\s+/g, ' ').trim(), part: true });
+    }
+    return drawn;
+  }
+
   function apply(result, opts) {
     const { layer, flash, notes } = opts;
     const items = result.changes.map((change) => ({
@@ -82,35 +149,23 @@
     }));
     if (!result.tooMany && !items.length) return null;
     const located = items.filter((i) => i.target);
-    // A block inside a NEW block says nothing more than its ancestor: all it
-    // holds is new to the reader. It gets no mark of its own (no class, tag,
-    // step or row), the topmost new block carries the one mark. Under a
-    // CHANGED block, a new or changed block keeps its mark: that is more news.
-    const fresh = new Set(located.filter((i) => i.kind === 'new').map((i) => i.target));
-    const underNew = (node) => {
-      for (let up = node.parentElement; up; up = up.parentElement) {
-        if (fresh.has(up)) return true;
-      }
-      return false;
-    };
-    const absorbed = new Set(located.filter((i) => i.kind !== 'removed' && underNew(i.target)));
-    const drawn = located.filter((i) => !absorbed.has(i));
-    const counted = items.filter((i) => !absorbed.has(i));
-    // Every block that changed, drawn or absorbed: none of them is dimmed.
-    const marked = new Set();
-    for (const item of located) {
-      if (item.kind === 'removed') continue;
-      marked.add(item.target);
-      if (absorbed.has(item)) continue;
-      item.target.classList.add(item.kind === 'new' ? 'annotate-new' : 'annotate-changed');
+    const drawn = placeMarks(result, located);
+    const drawnSet = new Set(drawn);
+    const parts = drawn.filter((i) => i.part);           // a new part that is no block itself
+    const absorbed = new Set(located.filter((i) => i.kind !== 'removed' && !drawnSet.has(i)));
+    const counted = items.filter((i) => !absorbed.has(i)).concat(parts);
+    for (const item of drawn) {
+      if (item.kind !== 'removed') item.target.classList.add(item.kind === 'new' ? 'annotate-new' : 'annotate-changed');
     }
+    // Every block that changed, drawn or absorbed, and every new part: none is dimmed.
+    const marked = new Set(located.filter((i) => i.kind !== 'removed').concat(parts).map((i) => i.target));
     highlight(drawn);
 
     let sections = [];
     const level = foldLevel();
     if (level) sections = sectionsOf(level);
     const sectionOf = (node) => sections.find((s) => inside(s, node)) || null;
-    for (const item of located) item.section = sectionOf(item.target);
+    for (const item of located.concat(parts)) item.section = sectionOf(item.target);
 
     const unfold = (sec) => {
       if (!sec.fold) return;
@@ -217,16 +272,29 @@
           }
           // Above the block, lowered into its top border and padding when it
           // has some: never on the block's own text, less on the one above.
-          // Past a rounded corner, on the straight part of a wide block's edge.
+          // Past a rounded corner, on the straight part of the edge (never past
+          // a quarter of a small round block, a numbered dot).
           const style = getComputedStyle(item.target);
           const room = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.paddingTop) || 0);
           const corner = parseFloat(style.borderTopLeftRadius) || 0;
-          let x = box.left - origin.left + (box.width > 4 * corner ? Math.max(6, Math.min(corner, 24)) : 6);
+          let x = box.left - origin.left + Math.max(6, Math.min(corner, 24, box.width / 4));
           const y = box.top - origin.top - 17 + Math.min(16, Math.max(0, room - 1));
-          // Never on a tag placed just before (a dot beside its title, a first
-          // child at its parent's tab): slide right past it.
           if (!tagWidth[item.kind]) tagWidth[item.kind] = el.offsetWidth;
           const w = tagWidth[item.kind];
+          // No room above and the line above taken where the tag would go (a
+          // new item under an old one): at the right end of the block instead.
+          const prev = room < 1 && item.target.previousElementSibling;
+          if (prev && !view.hidden(prev)) {
+            const range = document.createRange();
+            range.selectNodeContents(prev);
+            const lines = [...range.getClientRects()].filter((r) => r.width &&
+              r.bottom - origin.top > y + 1 && r.top - origin.top < y + 15);
+            const covers = (px) => lines.some((r) => r.left - origin.left < px + w && r.right - origin.left > px);
+            const right = box.right - origin.left - w - 6;
+            if (covers(x) && right > x && !covers(right)) x = right;
+          }
+          // Never on a tag placed just before (a dot beside its title, a first
+          // child at its parent's tab): slide right past it.
           const near = placed.slice(-8);
           for (let moved = true; moved;) {
             moved = false;
@@ -279,7 +347,7 @@
           const where = item.section ? cut(item.section.heading.textContent.trim(), 18) + ' · ' : '';
           // A new block that holds absorbed ones reads by all its text, not its
           // own (a card's own text is its number). A removed row keeps its text.
-          const holds = item.kind === 'new' && [...absorbed].some((a) => item.target.contains(a.target));
+          const holds = item.kind === 'new' && !item.part && [...absorbed].some((a) => item.target.contains(a.target));
           const text = holds ? item.target.innerText.replace(/\s+/g, ' ').trim() : item.text;
           row.append(make('i', 'dot ' + item.kind), make('span', '', where + cut(text, 44)));
           row.addEventListener('click', () => go(i));

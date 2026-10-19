@@ -10,12 +10,14 @@
 
 /* What changed since the last send (changes.js), in the document. */
 /* The side bar is drawn OUTSIDE the block (outer shadows never paint under
-   the box): it changes no layout and never covers the first letter. */
-.annotate-new { background-color: rgba(22, 163, 74, .12) !important;
-  box-shadow: -6px 0 0 #16a34a !important; }
-.annotate-changed { background-color: rgba(37, 99, 235, .11) !important;
-  box-shadow: -6px 0 0 #2563eb !important; }
-tr.annotate-new, tr.annotate-changed { box-shadow: none !important; }
+   the box): it changes no layout and never covers the first letter. The tint
+   is an inset shadow: it lies OVER the block's own background and under its
+   content, so a coloured block (a numbered dot, a card) keeps its colour. */
+.annotate-new { box-shadow: -6px 0 0 #16a34a, inset 0 0 0 9999px rgba(22, 163, 74, .12) !important; }
+.annotate-changed { box-shadow: -6px 0 0 #2563eb, inset 0 0 0 9999px rgba(37, 99, 235, .11) !important; }
+/* A row paints no shadow: its tint stays a background, under its cells'. */
+tr.annotate-new { box-shadow: none !important; background-color: rgba(22, 163, 74, .12) !important; }
+tr.annotate-changed { box-shadow: none !important; background-color: rgba(37, 99, 235, .11) !important; }
 tr.annotate-new > :first-child { box-shadow: inset 4px 0 0 #16a34a !important; }
 tr.annotate-changed > :first-child { box-shadow: inset 4px 0 0 #2563eb !important; }
 svg.annotate-new, img.annotate-new { outline: 3px solid #16a34a !important; outline-offset: 4px; }
