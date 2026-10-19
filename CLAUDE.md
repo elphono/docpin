@@ -60,6 +60,15 @@ ajouté — n'importe lequel sous `~` — suit **tout** `.html` en dessous, hors
 vit qu'à un endroit** : le hook passe tout `.html` à `annotate register --hook`, qui demande
 `folders.wanted` ; il n'en garde aucune copie.
 
+**Un dossier exclu l'emporte sur tout dossier suivi** (2026-10-19, liste `excluded` de
+`folders.json`) : une session qui construit une application écrit des `.html` qui sont ses pages,
+pas des documents, et ils entraient dans la liste. Mêmes règles qu'un dossier suivi (sous `~`,
+absolu, existant) ; `folders.wanted` le consulte, donc le hook, le parcours, le rescan et
+`is-document` (visual-first) aussi, sans autre copie. Exclure un dossier passe aussitôt en
+« Unmanage » les documents listés dessous (`forgotten.json`), sauf les protégés
+(`registry.protection`, voir le rescan) ; retirer l'exclusion ne les ramène pas tant qu'ils ne
+sont pas réécrits.
+
 **Le rattrapage est celui de l'utilisateur, et il est borné** : « Rescan » (page, pastille,
 `annotate rescan`) et l'ajout d'un dossier prennent les fichiers des N derniers jours (7 par défaut)
 — un rattrapage complet aurait ramené 100 documents d'un coup. Il ne ramène pas un document passé en
@@ -68,7 +77,8 @@ l'oubli). Le passage régulier, lui, ne rattrape toujours rien.
 
 **La page d'accueil (`/`, ouverte d'un clic gauche sur la pastille) porte tous les contrôles
 de la pastille** : par document Open, Send to session, New session, Unmanage, Delete file ; les
-dossiers suivis (ajout avec suggestions, retrait) et Rescan ; pour le démon Restart et Stop, demandés à systemd (`service.control`, `--no-block`, refusés si le
+dossiers suivis (ajout avec suggestions, retrait), les dossiers exclus (mêmes suggestions) et
+Rescan ; pour le démon Restart et Stop, demandés à systemd (`service.control`, `--no-block`, refusés si le
 démon n'a pas été lancé par systemd). **Start n'y est pas, et ne peut pas y être** : un démon
 arrêté ne sert plus de page où cliquer ; il reste dans la pastille. La page passe par la même
 API que la pastille, avec la même garde (`X-Annotate`, origine locale).
@@ -141,7 +151,7 @@ uv run annotate wait <id>                # dans une session, EN ARRIÈRE-PLAN : 
 uv run annotate list | open [<id>] | send <id> | new-session <id> | resend <id> | forget <id> [--delete]
 uv run annotate sessions                 # les conversations auxquelles rattacher un document
 uv run annotate attach <id> <session> [--cwd DIR] | detach <id>
-uv run annotate folders [add|remove <dossier>]   # les dossiers suivis
+uv run annotate folders [add|remove|exclude|unexclude <dossier>]   # suivis et exclus
 uv run annotate rescan [--days N] [--folder D]   # rattrape les N derniers jours
 uv run annotate serve                    # le démon, au premier plan
 uv run annotate service                  # écrit ~/.config/systemd/user/annotate.service
@@ -197,6 +207,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | l'auteur d'un document est le DERNIER appel d'outil qui le nomme avant son écriture, sous-agent compris | `test_the_writer_is_the_last_call_naming_the_file_before_it_was_written` |
 | le hook n'enregistre qu'un document d'un dossier suivi, et la règle n'a qu'une copie | `test_register_for_the_hook_takes_only_a_document_of_a_tracked_folder`, `test_every_html_file_is_handed_over_and_annotate_decides` |
 | un dossier ne se suit que sous `~` ; un dossier ajouté suit tout `.html`, le workspace garde sa règle `docs/` | `test_a_folder_outside_the_home_directory_or_not_absolute_is_refused`, `test_a_folder_the_user_adds_tracks_every_html_under_it` |
+| rien sous un dossier exclu n'est un document, même dans un dossier suivi ou un `docs/` du workspace, pour le hook comme pour le parcours ; l'exclure passe en Unmanage ce qui est listé dessous, jamais un protégé, jamais rien à côté | `test_a_document_under_an_excluded_folder_is_never_wanted_even_in_a_tracked_one`, `test_register_for_the_hook_refuses_a_document_under_an_excluded_folder`, `test_excluding_a_folder_unmanages_the_documents_listed_under_it`, `test_excluding_a_folder_keeps_a_document_a_batch_never_takes`, `tests/browser/index_check.mjs` |
 | un rescan ne prend que les N derniers jours, un à la fois, et ne ramène pas un document oublié | `test_a_catch_up_takes_the_recent_window_only`, `test_one_catch_up_at_a_time_and_the_last_one_is_reported`, `test_an_unmanaged_document_stays_out_of_a_catch_up_until_written_again` |
 | un document ne se rattache qu'à une conversation que `claude --resume` trouverait ; le rattachement écrit `session_id`, sans toucher au statut ni garder un worktree disparu | `test_attaching_a_document_writes_its_session_and_moves_it_to_that_group`, `test_a_session_this_machine_cannot_resume_is_refused_with_a_400`, `test_an_attach_keeps_the_status_and_never_a_deleted_worktree_folder` |
 | la liste des sessions ne propose que des conversations reprenables, jamais un sous-agent, les ouvertes d'abord, bornée sans couper une session ouverte | `test_the_list_offers_only_resumable_conversations_and_never_a_subagent`, `test_open_sessions_come_first_then_the_most_recently_active`, `test_the_list_is_bounded_and_never_cuts_an_open_session` |

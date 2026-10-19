@@ -365,15 +365,43 @@ def test_a_bad_folder_or_window_is_a_400_with_its_reason(daemon, body):
     assert daemon.request("POST", "/api/scan", {"days": "x"})[0] == 400
 
 
+def test_an_excluded_folder_from_the_page_unmanages_what_is_listed_under_it(daemon, make_doc):
+    page = make_doc("<p>p</p>", name="index.html", folder="docs/app")
+    kept = make_doc("<p>k</p>", name="kept.html", folder="docs/app")
+    report = make_doc("<p>r</p>", name="report.html")
+    ids = {p.name: registry.register(p)["id"] for p in (page, kept, report)}
+    registry.update(ids["kept.html"], status="delivered")         # the session is on it
+    app = str(page.parent.resolve())
+    status, body = daemon.request("POST", "/api/folders/excluded", {"path": app})
+    assert status == 201 and (body["forgotten"], body["kept"]) == (1, 1)
+    assert body["message"].startswith(f"Excluded: {app}. 1 document(s) under it unmanaged")
+    assert set(registry.all_docs()) == {ids["kept.html"], ids["report.html"]}
+    listing = daemon.request("GET", "/api/folders")[1]
+    assert listing["excluded"] == [{"path": app, "exists": True}]
+    docs = {d["id"]: d for d in daemon.request("GET", "/api/docs")[1]["docs"]}
+    assert docs[ids["kept.html"]]["protected"] == "the session is on it"
+    assert docs[ids["report.html"]]["protected"] == ""
+    status, body = daemon.request("DELETE", "/api/folders/excluded?path=" + app)
+    assert status == 200 and body["removed"] == {"path": app}
+    assert daemon.request("GET", "/api/folders")[1]["excluded"] == []
+    assert daemon.request("DELETE", "/api/folders/excluded?path=" + app)[0] == 400
+    assert daemon.request("POST", "/api/folders/excluded", {"path": "/usr"})[0] == 400
+    assert daemon.request("GET", "/api/folders/excluded")[0] == 405
+
+
 def test_folder_and_rescan_requests_need_the_client_header(daemon, tmp_path):
     for method, path in (("POST", "/api/folders"), ("POST", "/api/scan"),
-                         ("DELETE", "/api/folders?path=/x")):
+                         ("DELETE", "/api/folders?path=/x"),
+                         ("POST", "/api/folders/excluded"),
+                         ("DELETE", "/api/folders/excluded?path=" + str(tmp_path))):
         conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)
         conn.request(method, path, body=json.dumps({"path": str(tmp_path)}),
                      headers={"Host": f"localhost:{daemon.port}"})
         assert conn.getresponse().status == 403
         conn.close()
     assert daemon.srv.catchups.state() == {"running": None, "last": None}
+    from annotate import folders
+    assert folders.load_excluded() == []
 
 
 # -- attaching a document to a conversation (2026-10-08) -----------------------

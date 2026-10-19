@@ -248,6 +248,82 @@ def test_a_folder_inside_a_tracked_one_is_not_walked_twice(ws, tmp_path):
     assert folders.roots(folders.load()) == [ws.resolve()]
 
 
+# -- the excluded folders (2026-10-19) -------------------------------------------
+
+def nobody(doc_id: str) -> bool:
+    return False
+
+
+def test_a_document_under_an_excluded_folder_is_never_wanted_even_in_a_tracked_one(ws, tmp_path):
+    """The pages of an application a session builds are not documents, under
+    a tracked folder or a `docs/` folder of the workspace."""
+    app = tmp_path / "app"
+    folders.add(str(app.parent))                            # the home: every .html
+    recent = NOW - scanner.DAY                              # in the window of a rescan
+    page = write(app, "public/docs/index.html", recent)     # a docs/ on the way, too
+    docs_page = write(ws, "repo/docs/app/page.html", recent)
+    beside = write(ws, "repo/docs/report.html", recent)
+    scanner.scan_once(now=2000.0)
+    assert all(folders.wanted(p) for p in (page, docs_page, beside))   # before: documents
+    for folder in (app, ws / "repo" / "docs" / "app"):
+        folders.exclude(str(folder), listening=nobody)
+    assert [folders.wanted(p) for p in (page, docs_page, beside)] == [False, False, True]
+    assert names(scanner.scan_once(now=3000.0)) == {"report.html"}
+    assert names(scanner.catch_up(7, now=NOW)) == set()     # the rescan asks the same rule
+    assert folders.load_excluded() == [app.resolve(), (ws / "repo" / "docs" / "app").resolve()]
+
+
+def test_excluding_a_folder_unmanages_the_documents_listed_under_it(ws, tmp_path):
+    inside = write(ws, "repo/docs/app/page.html", NOW - scanner.DAY)
+    deeper = write(ws, "repo/docs/app/sub/other.html", NOW - scanner.DAY)
+    outside = write(ws, "repo/docs/report.html", NOW - scanner.DAY)
+    ids = {Path(p).name: registry.register(p)["id"] for p in (inside, deeper, outside)}
+    result = folders.exclude(str(ws / "repo" / "docs" / "app"), listening=nobody)
+    assert {Path(d["path"]).name for d in result["forgotten"]} == {"page.html", "other.html"}
+    assert result["kept"] == []
+    assert list(registry.all_docs()) == [ids["report.html"]]
+    for path in (inside, deeper):                           # unmanaged: the files stay
+        assert path.exists() and registry.dismissed(path, path.stat().st_mtime)
+
+
+def test_excluding_a_folder_keeps_a_document_a_batch_never_takes(ws):
+    path = write(ws, "repo/docs/app/listened.html", NOW - scanner.DAY)
+    doc_id = registry.register(path)["id"]
+    result = folders.exclude(str(ws / "repo" / "docs" / "app"),
+                             listening=lambda i: i == doc_id)
+    assert result["forgotten"] == [] and list(registry.all_docs()) == [doc_id]
+    assert result["kept"] == [{"id": doc_id, "path": str(path),
+                               "reason": "a session listens for its notes"}]
+
+
+def test_an_exclusion_survives_the_tracked_list_changing_and_back(ws, tmp_path):
+    (tmp_path / "other").mkdir()
+    write(ws, "repo/docs/app/x.html", 2500.0)
+    folders.exclude(str(ws / "repo" / "docs" / "app"), listening=nobody)
+    # Only an exclusion on disk: the default tracked folder is still the default.
+    assert folders.load() == [{"path": str(ws.resolve()), "docs_only": True}]
+    folders.add(str(tmp_path / "other"))
+    folders.remove(str(ws.resolve()))
+    assert folders.load_excluded() == [(ws / "repo" / "docs" / "app").resolve()]
+    folders.exclude(str(ws / "repo" / "docs" / "app") + "/", listening=nobody)   # once only
+    assert len(folders.load_excluded()) == 1
+    assert folders.unexclude(str((ws / "repo" / "docs" / "app").resolve())) == {
+        "path": str((ws / "repo" / "docs" / "app").resolve())}
+    assert folders.load_excluded() == []
+    assert [f["path"] for f in folders.load()] == [str((tmp_path / "other").resolve())]
+    with pytest.raises(folders.FoldersError, match="not an excluded folder"):
+        folders.unexclude(str(ws))
+
+
+@pytest.mark.parametrize(("raw", "message"), [
+    ("", "no folder"), ("relative/path", "not an absolute path"), ("/usr", "is not under"),
+])
+def test_an_excluded_folder_follows_the_rules_of_a_tracked_one(ws, raw, message):
+    with pytest.raises(folders.FoldersError, match=message):
+        folders.exclude(raw, listening=nobody)
+    assert not folders.path().exists()
+
+
 def test_subfolders_are_proposed_under_the_home_directory_only(ws, tmp_path):
     for name in ("alpha", "alps", "beta", ".hidden"):
         (tmp_path / "pick" / name).mkdir(parents=True)

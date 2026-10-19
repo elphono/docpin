@@ -12,7 +12,7 @@
     annotate sessions
     annotate attach <id> <session> [--cwd DIR]
     annotate detach <id>
-    annotate folders [add <folder> | remove <folder>]
+    annotate folders [add | remove | exclude | unexclude <folder>]
     annotate rescan [--days N] [--folder <folder>]
     annotate serve
     annotate service
@@ -29,6 +29,7 @@ import subprocess
 import sys
 import time
 from collections import Counter
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
@@ -235,6 +236,25 @@ def cmd_detach(args: argparse.Namespace, cfg: config.Config) -> int:
     return cmd_attach(args, cfg)
 
 
+def _listeners(cfg: config.Config) -> Callable[[str], bool]:
+    """Which documents a session waits for, as the daemon knows it: a batch
+    of the command line (rescan, excluded folder, cleanup) never takes one.
+    Read only: the batch itself runs here, on this registry. With no daemon,
+    nobody can be waiting (a wait is a request the daemon holds); any other
+    error stops the command before it unmanages anything."""
+    try:
+        data = client.call(cfg.port, "GET", "/api/docs", timeout=5)
+    except client.DaemonUnreachable:
+        return lambda doc_id: False
+    ids = {str(d.get("id")) for d in data.get("docs", []) if d.get("listening")}
+    return ids.__contains__
+
+
+def _print_kept(kept: list[dict[str, str]]) -> None:
+    for item in kept:
+        print(f"  kept {item['id']}  ({item['reason']})  {item['path']}")
+
+
 def cmd_folders(args: argparse.Namespace, cfg: config.Config) -> int:
     if args.action == "add":
         entry = folders.add(args.folder)
@@ -244,12 +264,24 @@ def cmd_folders(args: argparse.Namespace, cfg: config.Config) -> int:
     if args.action == "remove":
         print(f"no longer tracked: {folders.remove(args.folder)['path']}")
         return 0
+    if args.action == "exclude":
+        result = folders.exclude(args.folder, listening=_listeners(cfg))
+        print(server.excluded_message(result["folder"]["path"], len(result["forgotten"]),
+                                      len(result["kept"])))
+        _print_kept(result["kept"])
+        return 0
+    if args.action == "unexclude":
+        print(f"no longer excluded: {folders.unexclude(args.folder)['path']}")
+        return 0
     for item in folders.load():
         rule = "only under a docs/ folder" if item["docs_only"] else "every .html"
         if item.get("scan") is False:
             rule += ", when a session writes it (never walked)"
         missing = "" if Path(item["path"]).is_dir() else "  (missing)"
         print(f"{item['path']}  {rule}{missing}")
+    for folder in folders.load_excluded():
+        missing = "" if folder.is_dir() else "  (missing)"
+        print(f"{folder}  excluded: nothing under it is a document{missing}")
     return 0
 
 
@@ -373,8 +405,9 @@ def parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.set_defaults(run=cmd_detach)
 
-    p = sub.add_parser("folders", help="the folders whose HTML files are tracked")
-    p.add_argument("action", nargs="?", choices=("add", "remove"))
+    p = sub.add_parser("folders", help="the folders whose HTML files are tracked, "
+                                       "and those excluded")
+    p.add_argument("action", nargs="?", choices=("add", "remove", "exclude", "unexclude"))
     p.add_argument("folder", nargs="?")
     p.set_defaults(run=cmd_folders)
 
@@ -433,7 +466,7 @@ def main(argv: list[str] | None = None) -> int:
     top = parser()
     args = top.parse_args(argv)
     if args.command == "folders" and bool(args.action) != bool(args.folder):
-        top.error("folders add|remove needs a folder")
+        top.error("folders add|remove|exclude|unexclude needs a folder")
     logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
                         format="%(levelname)s %(message)s", stream=sys.stderr)
     try:

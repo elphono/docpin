@@ -39,7 +39,7 @@ import fcntl
 import hashlib
 import json
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -369,6 +369,22 @@ def update(doc_id: str, **fields: Any) -> dict[str, Any]:
         return dict(docs[doc_id])
 
 
+def _unmanage(docs: dict[str, dict[str, Any]], doc_id: str,
+              forgotten: dict[str, float] | None) -> dict[str, Any]:
+    """`forget`'s core, under the lock: the entry, its annotations and its
+    reference go; the file stays, and is recorded in `forgotten` with its
+    date if a table is given (see `dismissed`). The caller writes both."""
+    entry = docs.pop(doc_id)
+    annotations_path(doc_id).unlink(missing_ok=True)
+    baseline_path(doc_id).unlink(missing_ok=True)
+    if forgotten is not None:
+        try:
+            forgotten[entry["path"]] = Path(entry["path"]).stat().st_mtime
+        except OSError:
+            pass
+    return entry
+
+
 def forget(doc_id: str, delete_file: bool = False) -> dict[str, Any]:
     """Remove the entry and its annotations; with `delete_file`, the file too.
     A file that stays is remembered with its date (see `dismissed`)."""
@@ -376,25 +392,81 @@ def forget(doc_id: str, delete_file: bool = False) -> dict[str, Any]:
         docs = _read_docs()
         if doc_id not in docs:
             raise UnknownDocument(f"no document {doc_id!r} in the registry")
-        entry = docs.pop(doc_id)
+        table = None if delete_file else _read_forgotten()
+        entry = _unmanage(docs, doc_id, table)
         _write_docs(docs)
-        annotations_path(doc_id).unlink(missing_ok=True)
-        baseline_path(doc_id).unlink(missing_ok=True)
-        if not delete_file:
-            try:
-                mtime = Path(entry["path"]).stat().st_mtime
-            except OSError:
-                mtime = None
-            if mtime is not None:
-                table = _read_forgotten()
-                table[entry["path"]] = mtime
-                _write_forgotten(table)
+        if table is not None and entry["path"] in table:
+            _write_forgotten(table)
     if delete_file:
         try:
             Path(entry["path"]).unlink(missing_ok=True)
         except OSError as exc:
             raise RegistryError(f"cannot delete {entry['path']}: {exc}") from exc
     return entry
+
+
+def protection(doc: dict[str, Any]) -> str:
+    """Why a batch must leave this document listed, or "" if it may go.
+
+    The batches are the rescan (documents older than its window), an excluded
+    folder (documents under it) and "Cleanup files" (documents without a
+    known session). Written once, here: each batch asks it under the lock,
+    and the page reads its answer (`protected` in /api/docs) instead of
+    keeping a copy. `doc` is a `summary()` item with `listening`; a field
+    that is absent counts as the protecting value.
+
+    | Reason                          | Why it stays                          |
+    |---------------------------------|---------------------------------------|
+    | a session listens for its notes | its `annotate wait` would lose the document |
+    | `delivered`                     | the session is on it, its answer comes |
+    | its file is missing             | nothing to judge the age by, and the user should see it |
+    | notes wait to be sent           | an Unmanage drops the annotations     |
+    """
+    if doc.get("listening", True):
+        return "a session listens for its notes"
+    if doc.get("status") == "delivered":
+        return "the session is on it"
+    if not doc.get("exists", False):
+        return "its file is missing"
+    if doc.get("pending", 1):
+        return "notes wait to be sent"
+    return ""
+
+
+def forget_batch(select: Callable[[dict[str, Any]], bool],
+                 listening: Callable[[str], bool]) -> dict[str, list[dict[str, Any]]]:
+    """Unmanage, in one pass under the lock, every document that `select`
+    picks and `protection` lets go, as `forget` does each one (the file
+    stays, remembered in forgotten.json). `select` and `protection` see the
+    document as `summary()` shows it, with `listening(id)`.
+
+    Returns {"forgotten": [items], "kept": [{"id", "path", "reason"}]}: what
+    went, and what was picked but protected."""
+    gone: list[dict[str, Any]] = []
+    kept: list[dict[str, Any]] = []
+    with locked():
+        docs = _read_docs()
+        table = _read_forgotten()
+        for doc_id, entry in list(docs.items()):
+            try:
+                mtime: float | None = Path(entry["path"]).stat().st_mtime
+            except OSError:
+                mtime = None
+            item = {**entry, "exists": mtime is not None, "mtime": mtime,
+                    "pending": len(pending(_read_annotations(doc_id))),
+                    "listening": bool(listening(doc_id))}
+            if not select(item):
+                continue
+            reason = protection(item)
+            if reason:
+                kept.append({"id": doc_id, "path": entry["path"], "reason": reason})
+                continue
+            _unmanage(docs, doc_id, table)
+            gone.append(item)
+        if gone:
+            _write_docs(docs)
+            _write_forgotten(table)
+    return {"forgotten": gone, "kept": kept}
 
 
 # -- annotations -------------------------------------------------------------

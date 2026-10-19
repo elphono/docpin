@@ -250,7 +250,12 @@
   .tracked .rule .badge { margin-left: 4px; }
   .tracked button { grid-column: 2; grid-row: 1 / span 2; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-  #folder-input { flex: 1 1 180px; font-family: var(--mono); font-size: 13px; }
+  #folder-input, #exclude-input { flex: 1 1 180px; font-family: var(--mono); font-size: 13px; }
+  .excluded-box { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+  .excluded-box h3 { margin: 0; font-size: 13px; font-weight: 650; }
+  .excluded-box .hint { margin: 0; font-size: 12.5px; color: var(--faint); }
+  #excluded-list { display: grid; gap: 6px; }
+  .tracked.excluded { border-style: dashed; }
   .row label { font-size: 13px; color: var(--muted); }
   #days { padding: 5px 6px; font-size: 13px; }
   #scan-state { font-size: 12.5px; color: var(--faint); }
@@ -376,6 +381,17 @@
             day(s)</label>
         </div>
         <div id="scan-state"></div>
+        <div class="excluded-box">
+          <h3>Excluded folders</h3>
+          <p class="hint">No HTML file under them is a document, whatever tracks them: the pages
+            of an application, for one. Excluding a folder unmanages what is listed under it.</p>
+          <div id="excluded-list"></div>
+          <form id="exclude-folder" class="row">
+            <input id="exclude-input" list="folder-suggest" placeholder="~/folder/to/exclude"
+                   autocomplete="off" spellcheck="false" aria-label="Folder to exclude">
+            <button type="submit" id="exclude">Exclude</button>
+          </form>
+        </div>
       </div>
     </section>
     <section id="sync" class="card">

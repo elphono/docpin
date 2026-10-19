@@ -214,6 +214,30 @@ try {
   await page.waitForFunction(() => document.querySelectorAll('#folder-list .tracked').length === 1);
   step('folder removed after confirm');
 
+  // Excluded folders (2026-10-19): Delta's folder, no longer tracked, still
+  // holds a listed document; excluding it unmanages that document.
+  if (await page.locator('#excluded-list .tracked').count()) fail('an excluded folder before any');
+  await page.locator('#exclude-input').fill(parent);
+  await page.waitForFunction((want) => [...document.querySelectorAll('#folder-suggest option')]
+    .some((o) => o.value === want), folder + '/');
+  step('the folder to exclude is offered the same subfolders');
+  await page.locator('#exclude-input').fill(folder);
+  await page.getByRole('button', { name: 'Exclude', exact: true }).click();
+  await page.waitForFunction(() => document.getElementById('message').textContent.startsWith('Excluded:'));
+  const excluded = await page.locator('#message').textContent();
+  if (!excluded.includes('1 document(s) under it unmanaged')) fail('exclusion: ' + excluded);
+  await page.waitForFunction(() => !document.getElementById('groups').textContent.includes('Delta'));
+  const excludedRows = await page.locator('#excluded-list .tracked').allTextContents();
+  if (excludedRows.length !== 1 || !excludedRows[0].includes('nothing under it is a document')) {
+    fail('excluded list: ' + JSON.stringify(excludedRows));
+  }
+  await page.locator('#folders').screenshot({ path: join(outDir, 'index-excluded.png') });
+  step('folder excluded after confirm, its listed document unmanaged: ' + excluded);
+  await page.locator('#excluded-list .tracked').getByRole('button', { name: 'Remove' }).click();
+  await page.waitForFunction(() => !document.querySelectorAll('#excluded-list .tracked').length &&
+    document.getElementById('message').textContent.startsWith('No longer excluded'));
+  step('exclusion removed: ' + (await page.locator('#message').textContent()));
+
   await page.locator('#days').selectOption('30');
   await page.getByRole('button', { name: 'Rescan all folders' }).click();
   await page.waitForFunction(() => document.getElementById('message').textContent.startsWith('Rescan started'));
@@ -226,7 +250,10 @@ try {
   await page.getByRole('button', { name: 'Stop daemon' }).click();
   await page.waitForFunction(() => document.getElementById('message').textContent.startsWith('Stop asked'));
   step('daemon buttons answered; dialogs: ' + dialogs.length);
-  if (dialogs.length !== 4) fail('expected 4 confirmations (unmanage, delete, remove folder, stop), got ' + dialogs.length);
+  if (dialogs.length !== 5) {
+    fail('expected 5 confirmations (unmanage, delete, remove folder, exclude folder, stop), got ' +
+         dialogs.length);
+  }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await fits(390);

@@ -187,6 +187,48 @@ def test_register_for_the_hook_takes_only_a_document_of_a_tracked_folder(tmp_pat
     assert cli.main(["register", str(outside)]) == 0      # by hand: always
 
 
+def test_register_for_the_hook_refuses_a_document_under_an_excluded_folder(
+        tmp_path, capsys, monkeypatch):
+    from annotate import folders
+    monkeypatch.setenv("ANNOTATE_PORT", str(_free_port()))   # never the user's daemon
+    app = tmp_path / "workspace" / "front" / "docs" / "app"
+    page = app / "index.html"
+    page.parent.mkdir(parents=True)
+    page.write_text("<title>App</title>")
+    folders.exclude(str(app), listening=lambda doc_id: False)
+    assert cli.main(["register", str(page), "--hook"]) == 0
+    assert capsys.readouterr().out == "" and registry.all_docs() == {}
+    assert cli.main(["is-document", str(page)]) == 1           # visual-first asks the same
+    folders.unexclude(str(app.resolve()))
+    assert cli.main(["register", str(page), "--hook"]) == 0
+    assert [d["path"] for d in registry.all_docs().values()] == [str(page)]
+
+
+def test_folders_exclude_and_unexclude_from_the_command_line(daemon, make_doc, capsys):
+    """Through the daemon's list of listeners: the document a session waits
+    for stays; the other one under the folder is unmanaged."""
+    waited = registry.register(make_doc("<p>w</p>", name="w.html", folder="docs/app"))["id"]
+    other = registry.register(make_doc("<p>o</p>", name="o.html", folder="docs/app"))["id"]
+    box: dict[str, object] = {}
+    waiter = threading.Thread(target=lambda: box.update(
+        w=daemon.sender.board.wait(waited, "s1", "/", lambda: True, 10)), daemon=True)
+    waiter.start()
+    assert _listening(waited)
+    app = registry.get(other)["path"].rsplit("/", 1)[0]
+    assert cli.main(["folders", "exclude", app]) == 0
+    out = capsys.readouterr().out
+    assert f"Excluded: {app}. 1 document(s) under it unmanaged" in out
+    assert f"kept {waited}  (a session listens for its notes)" in out
+    assert list(registry.all_docs()) == [waited]
+    assert cli.main(["folders"]) == 0
+    assert f"{app}  excluded: nothing under it is a document" in capsys.readouterr().out
+    assert cli.main(["folders", "unexclude", app]) == 0
+    assert cli.main(["folders", "unexclude", app]) == 1
+    assert "not an excluded folder" in capsys.readouterr().err
+    daemon.sender.board.deliver(waited, "release")
+    waiter.join(5)
+
+
 def test_sessions_attach_and_detach_from_the_command_line(make_doc, capsys, tmp_path):
     """Every control of the page has its command (2026-10-08)."""
     from annotate import claude

@@ -24,9 +24,13 @@
                                              machine ("" detaches; 400 if not resumable)
     DELETE /api/docs/<id>[?delete=1]         forget it (and delete the file)
     POST   /api/daemon/<restart|stop>        ask systemd (see service.control)
-    GET    /api/folders                      the tracked folders, and the rescan state
+    GET    /api/folders                      the tracked and the excluded folders, and the
+                                             rescan state
     POST   /api/folders  {path, days}        track a folder, catch up its recent files
     DELETE /api/folders?path=<folder>        stop tracking it (its documents stay)
+    POST   /api/folders/excluded {path}      exclude a folder: nothing under it is a
+                                             document, the listed ones are unmanaged
+    DELETE /api/folders/excluded?path=<folder>  no longer excluded
     GET    /api/folders/suggest?path=<text>  subfolders, for the folder field
     GET    /api/sessions                     the conversations a document can be attached
                                              to: open first, then most recent (claude.sessions)
@@ -335,12 +339,15 @@ class Handler(BaseHTTPRequestHandler):
         if rest == ["suggest"] and method == "GET":
             return self._json(HTTPStatus.OK,
                               folders.subfolders(query.get("path", [""])[0]))
+        if rest == ["excluded"]:
+            return self._excluded(method, query)
         if rest:
             raise Refused(HTTPStatus.NOT_FOUND, "not found")
         if method == "GET":
             items = [{**i, "exists": Path(i["path"]).is_dir()} for i in folders.load()]
+            excluded = [{"path": str(p), "exists": p.is_dir()} for p in folders.load_excluded()]
             return self._json(HTTPStatus.OK, {
-                "folders": items, "home": str(folders.home()),
+                "folders": items, "excluded": excluded, "home": str(folders.home()),
                 "default_days": scanner.DEFAULT_DAYS,
                 "scan": self.server.catchups.state()})
         if method == "POST":
@@ -357,6 +364,24 @@ class Handler(BaseHTTPRequestHandler):
             log.info("folder %s no longer tracked", entry["path"])
             return self._json(HTTPStatus.OK, {"removed": entry})
         raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET, POST or DELETE")
+
+    def _excluded(self, method: str, query: dict[str, list[str]]) -> None:
+        if method == "POST":
+            body = self._body()
+            body = body if isinstance(body, dict) else {}
+            result = folders.exclude(str(body.get("path") or ""),
+                                     listening=self.server.sender.board.listening)
+            gone, kept = len(result["forgotten"]), len(result["kept"])
+            log.info("folder %s excluded from the web page, %d document(s) unmanaged",
+                     result["folder"]["path"], gone)
+            return self._json(HTTPStatus.CREATED, {
+                "excluded": result["folder"], "forgotten": gone, "kept": kept,
+                "message": excluded_message(result["folder"]["path"], gone, kept)})
+        if method == "DELETE":
+            entry = folders.unexclude(query.get("path", [""])[0])
+            log.info("folder %s no longer excluded", entry["path"])
+            return self._json(HTTPStatus.OK, {"removed": entry})
+        raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "POST or DELETE")
 
     def _sync(self, method: str, rest: list[str], query: dict[str, list[str]]) -> None:
         body: Any = self._body() if method == "POST" else None
@@ -421,7 +446,11 @@ class Handler(BaseHTTPRequestHandler):
         self._send(HTTPStatus.OK, page.encode("utf-8"), "text/html; charset=utf-8")
 
     def _with_live(self, item: dict[str, Any]) -> dict[str, Any]:
-        return {**item, "listening": self.server.sender.board.listening(item["id"])}
+        live = {**item, "listening": self.server.sender.board.listening(item["id"])}
+        # Why a batch (rescan, excluded folder, Cleanup files) leaves it listed:
+        # the page counts with this, it keeps no copy of the rule.
+        live["protected"] = registry.protection(live)
+        return live
 
     def _client_alive(self) -> bool:
         """False once the client of this held request has gone away.
@@ -534,6 +563,14 @@ class Handler(BaseHTTPRequestHandler):
             message = f"{name} detached: it waits among the documents without a session."
             log.info("%s detached from its session from the web page", doc_id)
         self._json(HTTPStatus.OK, {"doc": entry, "message": message})
+
+
+def excluded_message(folder: str, gone: int, kept: int) -> str:
+    """What the page and the command line say after an exclusion."""
+    text = f"Excluded: {folder}. {gone} document(s) under it unmanaged (the files stay)"
+    if kept:
+        text += f"; {kept} kept, protected (a session on it, notes to send, or its file missing)"
+    return text + "."
 
 
 def listeners_session_ok(session: str) -> bool:

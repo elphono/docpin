@@ -169,9 +169,11 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     assert "from the index page" in box["waiter"].prompt  # type: ignore[union-attr]
     assert opener.calls == []
     from annotate import folders
-    delta = [i for i, d in registry.all_docs().items() if d["title"] == "Delta"]
-    assert set(registry.all_docs()) == {alpha, echo, foxtrot, *delta} and len(delta) == 1
+    delta = (reports / "delta.html").resolve()
+    assert set(registry.all_docs()) == {alpha, echo, foxtrot}
+    assert registry.dismissed(delta, delta.stat().st_mtime)     # unmanaged by the exclusion
     assert [f["path"] for f in folders.load()] == [str((tmp_path / "workspace").resolve())]
+    assert folders.load_excluded() == []                        # and the exclusion removed
     assert bravo_path.exists() and not charlie_path.exists()
     assert bravo and charlie and asked == ["restart", "stop"]
 

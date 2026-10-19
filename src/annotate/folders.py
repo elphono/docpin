@@ -9,13 +9,15 @@ the folders from the index page (decision of 2026-10-07: "on peut choisir
 n'importe quel dossier de ~/ [...] tout ce qui est en dessous du dossier
 choisi est traqué").
 
-    folders.json   {"version": 1, "folders": [{"path": "/abs", "docs_only": false}]}
+    folders.json   {"version": 1, "folders": [{"path": "/abs", "docs_only": false}],
+                    "excluded": [{"path": "/abs"}]}
 
 | Folder                          | What is tracked under it                    |
 |---------------------------------|---------------------------------------------|
 | the default one, the workspace  | every .html with a `docs/` folder on the way (`docs_only`) |
 | the default without a workspace | the same rule under the home directory, written by a session only (`scan: false`) |
 | a folder the user added         | every .html, at any depth                   |
+| an EXCLUDED folder              | nothing, whatever tracks it                 |
 
 **The home directory is never walked** (`scan: false`): measured 2026-10-12,
 one pass over a developer's home took 33.6 s, against 0.3 s for the
@@ -24,15 +26,24 @@ is therefore found when a session writes it (the hook), or when the user adds
 its folder; one written by Bash waits for that.
 
 In both cases nothing under a `SKIPPED` folder is a document. The default
-entry exists only while the file does not: once the user adds or removes a
-folder, the list on disk is the whole truth, the workspace included.
+entry exists only while the `folders` list is absent: once the user adds or
+removes a folder, the list on disk is the whole truth, the workspace included.
+
+**Excluded folders** (decision of 2026-10-19): a session that builds a web
+application writes `.html` files that are pages of the application, not
+documents to read, and they were listed. An excluded folder wins over every
+tracked one, the workspace's `docs/` rule included; excluding one unmanages
+at once the documents already listed under it (`exclude`), except those a
+batch never takes (registry.protection).
 
 **One rule, in one place**: the hook does not decide any more, it hands every
-.html it sees to `annotate register --hook`, which asks `wanted()`.
+.html it sees to `annotate register --hook`, which asks `wanted()`; the
+daemon's pass and the rescan ask it too.
 """
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -74,24 +85,45 @@ def _entry(item: dict[str, Any]) -> dict[str, Any]:
     return entry
 
 
-def load() -> list[dict[str, Any]]:
+def _raw() -> dict[str, Any]:
     try:
         data = json.loads(path().read_text(encoding="utf-8"))
     except FileNotFoundError:
-        return _default()
+        return {}
     except (OSError, ValueError) as exc:
         raise FoldersError(f"cannot read {path()}: {exc}") from exc
-    items = data.get("folders") if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        raise FoldersError(f"{path()}: not a JSON object")
+    return data
+
+
+def load() -> list[dict[str, Any]]:
+    """The tracked folders. Without a `folders` list on disk (no file, or only
+    exclusions in it), the default one."""
+    data = _raw()
+    if "folders" not in data:
+        return _default()
+    items = data["folders"]
     if not isinstance(items, list):
         raise FoldersError(f"{path()}: no 'folders' list")
     return [_entry(item) for item in items
             if isinstance(item, dict) and isinstance(item.get("path"), str)]
 
 
-def _save(items: list[dict[str, Any]]) -> None:
+def load_excluded() -> list[Path]:
+    """The excluded folders, absolute and resolved (`normalise`)."""
+    items = _raw().get("excluded", [])
+    if not isinstance(items, list):
+        raise FoldersError(f"{path()}: 'excluded' is not a list")
+    return [Path(item["path"]) for item in items
+            if isinstance(item, dict) and isinstance(item.get("path"), str)]
+
+
+def _save(**lists: list[Any]) -> None:
+    """Rewrite `folders` and/or `excluded`, keeping the other list as it is."""
+    data = {**_raw(), **lists, "version": 1}
     try:
-        registry.atomic_write(path(), json.dumps({"version": 1, "folders": items},
-                                                 ensure_ascii=False, indent=2) + "\n")
+        registry.atomic_write(path(), json.dumps(data, ensure_ascii=False, indent=2) + "\n")
     except OSError as exc:
         raise FoldersError(f"cannot write {path()}: {exc}") from exc
 
@@ -121,7 +153,7 @@ def add(raw: str) -> dict[str, Any]:
     with registry.locked():
         items = [i for i in load() if i["path"] != str(folder)]
         entry = {"path": str(folder), "docs_only": False}
-        _save([*items, entry])
+        _save(folders=[*items, entry])
     return entry
 
 
@@ -134,8 +166,40 @@ def remove(raw: str) -> dict[str, Any]:
         kept = [i for i in items if i["path"] != text]
         if len(kept) == len(items):
             raise FoldersError(f"{text!r} is not a tracked folder")
-        _save(kept)
+        _save(folders=kept)
     return next(i for i in items if i["path"] == text)
+
+
+def excluded_by(path: Path, excluded: list[Path]) -> bool:
+    """True if `path` (absolute, resolved) lies under one of `excluded`."""
+    return any(path.is_relative_to(folder) for folder in excluded)
+
+
+def exclude(raw: str, *, listening: Callable[[str], bool]) -> dict[str, Any]:
+    """Never take an .html under `raw` again, and unmanage at once the
+    documents listed under it, but those a batch never takes
+    (registry.protection: `listening` says which ones a session waits for).
+    Each unmanaged file is remembered as an Unmanage does (forgotten.json)."""
+    folder = normalise(raw)
+    with registry.locked():
+        others = [str(p) for p in load_excluded() if p != folder]
+        _save(excluded=[{"path": p} for p in [*others, str(folder)]])
+    batch = registry.forget_batch(lambda doc: excluded_by(Path(doc["path"]), [folder]),
+                                  listening)
+    return {"folder": {"path": str(folder)}, **batch}
+
+
+def unexclude(raw: str) -> dict[str, Any]:
+    """Take the .html files under `raw` again, as the tracked folders say.
+    What the exclusion unmanaged stays out until written again, as after an
+    Unmanage."""
+    text = (raw or "").strip()
+    with registry.locked():
+        items = [str(p) for p in load_excluded()]
+        if text not in items:
+            raise FoldersError(f"{text!r} is not an excluded folder")
+        _save(excluded=[{"path": p} for p in items if p != text])
+    return {"path": text}
 
 
 def _matches(path: Path, folder: Path, docs_only: bool) -> bool:
@@ -148,15 +212,19 @@ def _matches(path: Path, folder: Path, docs_only: bool) -> bool:
     return "docs" in parts if docs_only else True
 
 
-def wanted(path: Path, items: list[dict[str, Any]] | None = None) -> bool:
+def wanted(path: Path, items: list[dict[str, Any]] | None = None,
+           excluded: list[Path] | None = None) -> bool:
     """True if `path` is a document: an .html file that one tracked folder
-    claims. The hook (through `annotate register --hook`) and the daemon's
-    pass both ask this, and nothing else."""
+    claims and no excluded folder holds. The hook (through `annotate register
+    --hook`), the daemon's pass and the rescan all ask this, and nothing else.
+    `items` and `excluded` default to what is on disk."""
     if path.suffix.lower() != ".html":
         return False
     try:
         resolved = path.expanduser().resolve()
     except OSError:
+        return False
+    if excluded_by(resolved, load_excluded() if excluded is None else excluded):
         return False
     return any(_matches(resolved, Path(i["path"]), i["docs_only"])
                for i in (load() if items is None else items))

@@ -12,7 +12,10 @@
  * here: a stopped daemon serves no page to click it on; the tray keeps it.
  * For the tracked folders (decision of 2026-10-07): add one under the home
  * directory, remove one, and "Rescan", which registers what was written in
- * the last N days; adding a folder does the same for that folder.
+ * the last N days; adding a folder does the same for that folder. The
+ * excluded folders (decision of 2026-10-19): add one (the same proposals as
+ * for a tracked folder), which unmanages what is listed under it, or remove
+ * one; whether a file is a document stays the daemon's answer.
  *
  * For the sync between machines (decision of 2026-10-13): turn it on, the
  * store (Google Drive, or a folder another program syncs), the passphrase, the
@@ -45,6 +48,8 @@
   const messageBox = $('message');
   const folderList = $('folder-list');
   const folderInput = $('folder-input');
+  const excludedList = $('excluded-list');
+  const excludeInput = $('exclude-input');
   const suggestions = $('folder-suggest');
   const daysSelect = $('days');
   const scanState = $('scan-state');
@@ -611,9 +616,10 @@
     }
     // Rebuilt only when the list changes: a rebuild under the cursor would
     // swap the Remove button being pressed.
-    const key = JSON.stringify(data.folders);
+    const key = JSON.stringify([data.folders, data.excluded]);
     if (key === shownFolders) return;
     shownFolders = key;
+    renderExcluded(data.excluded || []);
     folderList.textContent = '';
     if (!data.folders.length) {
       folderList.append(make('p', 'meta', 'No folder tracked: nothing new will be listed.'));
@@ -633,6 +639,27 @@
             return 'No longer tracked: ' + tilde(folder.path);
           }));
       folderList.append(row);
+    }
+  }
+
+  // An excluded folder wins over every tracked one (folders.wanted decides).
+  function renderExcluded(items) {
+    excludedList.textContent = '';
+    if (!items.length) {
+      excludedList.append(make('p', 'meta', 'None: every tracked HTML file is a document.'));
+    }
+    for (const folder of items) {
+      const row = make('div', 'tracked excluded');
+      row.dataset.path = folder.path;
+      const rule = make('span', 'rule', 'nothing under it is a document');
+      if (!folder.exists) rule.append(make('span', 'badge danger', 'folder missing'));
+      row.append(make('code', '', tilde(folder.path)), rule,
+        button('Remove', 'ghost', 'Its HTML files may be documents again (what was unmanaged ' +
+          'comes back when written again)', async () => {
+          await call('DELETE', '/api/folders/excluded?path=' + encodeURIComponent(folder.path));
+          return 'No longer excluded: ' + tilde(folder.path);
+        }));
+      excludedList.append(row);
     }
   }
 
@@ -856,15 +883,29 @@
       ' day(s), in every tracked folder.' : 'A rescan is already running.';
   }));
 
-  // Subfolders as the user types, written the way the user writes them.
+  $('exclude-folder').addEventListener('submit', (e) => {
+    e.preventDefault();
+    act($('exclude'), async () => {
+      const path = excludeInput.value.trim();
+      if (!path) throw new Error('Type the folder to exclude.');
+      if (!confirm('Exclude this folder? No HTML file under it will be a document, and those ' +
+                   'listed now are unmanaged (their files stay on disk).\n\n' + path)) return '';
+      const answer = await call('POST', '/api/folders/excluded', { path });
+      excludeInput.value = '';
+      return answer.message;
+    });
+  });
+
+  // Subfolders as the user types, written the way the user writes them: the
+  // same proposals for a folder to track and a folder to exclude.
   let suggestTimer = 0;
-  folderInput.addEventListener('input', () => {
+  const suggest = (input) => input.addEventListener('input', () => {
     clearTimeout(suggestTimer);
     suggestTimer = setTimeout(async () => {
       try {
         const answer = await call('GET', '/api/folders/suggest?path=' +
-                                  encodeURIComponent(folderInput.value || '~/'));
-        const typedTilde = (folderInput.value || '~').startsWith('~');
+                                  encodeURIComponent(input.value || '~/'));
+        const typedTilde = (input.value || '~').startsWith('~');
         suggestions.textContent = '';
         for (const path of answer.folders) {
           const option = document.createElement('option');
@@ -874,6 +915,8 @@
       } catch (err) { /* suggestions are a convenience */ }
     }, 150);
   });
+  suggest(folderInput);
+  suggest(excludeInput);
 
   setInterval(() => { if (!busy) refresh(); }, REFRESH_MS);
   refresh();

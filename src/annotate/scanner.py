@@ -77,16 +77,20 @@ def write_since(since: float) -> None:
 
 
 def candidates(items: list[dict[str, Any]], since: float) -> list[tuple[Path, float]]:
-    """Every document of the tracked folders `items` written after `since`."""
+    """Every document of the tracked folders `items` written after `since`.
+    An excluded folder is not entered: what is a document is still
+    `folders.wanted`'s answer, the pruning only spares the walk."""
     found: dict[Path, float] = {}
+    excluded = folders.load_excluded()
     for root in folders.roots(items):
         for folder, dirs, files in os.walk(root):
-            dirs[:] = [d for d in dirs if d not in folders.SKIPPED]
+            dirs[:] = [d for d in dirs if d not in folders.SKIPPED
+                       and not folders.excluded_by(Path(folder) / d, excluded)]
             for name in files:
                 if not name.lower().endswith(".html"):
                     continue
                 path = Path(folder) / name
-                if path in found or not folders.wanted(path, items):
+                if path in found or not folders.wanted(path, items, excluded):
                     continue
                 try:
                     mtime = path.stat().st_mtime
