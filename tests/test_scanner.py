@@ -288,10 +288,14 @@ def test_excluding_a_folder_unmanages_the_documents_listed_under_it(ws, tmp_path
 
 def test_excluding_a_folder_keeps_a_document_a_batch_never_takes(ws):
     path = write(ws, "repo/docs/app/listened.html", NOW - scanner.DAY)
+    gone = write(ws, "repo/docs/app/gone.html", NOW - scanner.DAY)
     doc_id = registry.register(path)["id"]
+    gone_id = registry.register(gone)["id"]
+    gone.unlink()                                  # listened too: a missing file still goes
     result = folders.exclude(str(ws / "repo" / "docs" / "app"),
-                             listening=lambda i: i == doc_id)
-    assert result["forgotten"] == [] and list(registry.all_docs()) == [doc_id]
+                             listening={doc_id, gone_id}.__contains__)
+    assert [d["id"] for d in result["forgotten"]] == [gone_id]
+    assert list(registry.all_docs()) == [doc_id]
     assert result["kept"] == [{"id": doc_id, "path": str(path),
                                "reason": "a session listens for its notes"}]
 
@@ -415,28 +419,50 @@ def test_a_catch_up_of_one_folder_forgets_only_under_it(ws, tmp_path):
     assert scanner.rescan(7, now=NOW, listening=nobody)["removed"] == [old_ws]
 
 
+def note(text: str) -> list[dict[str, str]]:
+    return [{"id": "n1", "selector": "body", "quote": "x", "note": text}]
+
+
 def test_a_catch_up_never_forgets_a_protected_document(ws):
     """Each protection alone keeps its document; the unprotected one beside
     them goes, so that nothing here passes by forgetting nothing."""
     old = NOW - 30 * scanner.DAY
     paths = {name: write(ws, f"repo/docs/{name}.html", old)
-             for name in ("listened", "delivered", "missing", "notes", "plain")}
+             for name in ("listened", "delivered", "notes", "plain")}
     ids = {name: registry.register(path)["id"] for name, path in paths.items()}
     registry.update(ids["delivered"], status="delivered")
-    paths["missing"].unlink()
-    registry.replace_annotations(ids["notes"], [{"id": "n1", "selector": "body",
-                                                 "quote": "x", "note": "not sent yet"}])
+    registry.replace_annotations(ids["notes"], note("not sent yet"))
     result = scanner.rescan(7, now=NOW, listening=lambda i: i == ids["listened"])
     assert result["removed"] == [ids["plain"]]
     reasons = {item["id"]: item["reason"] for item in result["kept"]}
     assert reasons == {ids["listened"]: "a session listens for its notes",
                        ids["delivered"]: "the session is on it",
-                       ids["missing"]: "its file is missing",
                        ids["notes"]: "notes wait to be sent"}
     assert set(registry.all_docs()) == set(reasons)
     assert registry.list_annotations(ids["notes"])[0]["note"] == "not sent yet"
     assert registry.protection({"listening": False, "status": "answered", "exists": True,
                                 "pending": 0}) == ""
+
+
+def test_a_missing_file_is_always_taken_even_with_every_protection(ws):
+    """Decision of 2026-10-20: "file missing" wins over every other label. A
+    document whose file is gone goes at the rescan, whatever its window (it
+    has no date), even when a session listens, it is delivered, and notes
+    wait. Its twin with the file still there stays: the protections hold."""
+    fresh = NOW - scanner.DAY                               # inside any window
+    gone = write(ws, "repo/docs/gone.html", fresh)
+    twin = write(ws, "repo/docs/twin.html", fresh)
+    ids = {p.name: registry.register(p)["id"] for p in (gone, twin)}
+    for doc_id in ids.values():
+        registry.update(doc_id, status="delivered")
+        registry.replace_annotations(doc_id, note("not sent yet"))
+    gone.unlink()
+    result = scanner.rescan(7, now=NOW, listening=set(ids.values()).__contains__)
+    assert result["removed"] == [ids["gone.html"]] and result["kept"] == []
+    assert list(registry.all_docs()) == [ids["twin.html"]]
+    assert registry.protection({"exists": False, "listening": True, "status": "delivered",
+                                "pending": 3}) == ""
+    assert registry.protection({"exists": True, "listening": True}) != ""
 
 
 def test_adding_a_folder_never_unmanages_an_older_document(ws, tmp_path, monkeypatch):

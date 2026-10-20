@@ -35,9 +35,9 @@
     GET    /api/folders/suggest?path=<text>  subfolders, for the folder field
     GET    /api/sessions                     the conversations a document can be attached
                                              to: open first, then most recent (claude.sessions)
-    POST   /api/cleanup  {ids}               "Cleanup files": unmanage these documents without
-                                             a session (all of them without ids); their files
-                                             are deleted later if untouched (cleanup.py)
+    POST   /api/cleanup  {session, ids}      "Cleanup files": unmanage these documents of the
+                                             session ("" none; all of the group without ids);
+                                             their files are deleted later if untouched
     POST   /api/scan     {days}              rescan: catch up every tracked folder, and
                                              unmanage what is older than the window (scanner)
     GET    /api/sync                         the sync settings (never a secret), what was
@@ -373,17 +373,21 @@ class Handler(BaseHTTPRequestHandler):
         raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET, POST or DELETE")
 
     def _cleanup(self) -> None:
-        """"Cleanup files": the documents without a known session the page
-        showed (`ids`; all of them without), unmanaged, their files deleted
-        later (cleanup.py)."""
+        """"Cleanup files": the documents of one group the page showed
+        (`session`, "" for those without a known session; `ids`, all of the
+        group without), unmanaged, their files deleted later (cleanup.py)."""
         body = self._body()
         body = body if isinstance(body, dict) else {}
-        result = cleanup.batch(self.server.sender.board.listening, body.get("ids"))
+        session = body.get("session", "")
+        result = cleanup.batch(self.server.sender.board.listening, body.get("ids"),
+                               session=session)
         gone, kept = len(result["forgotten"]), len(result["kept"])
-        log.info("cleanup of %d document(s) without a session requested from the web page", gone)
+        log.info("cleanup of %d document(s) of %s requested from the web page", gone,
+                 f"session {session}" if session else "no known session")
         return self._json(HTTPStatus.OK, {
             "forgotten": gone, "kept": kept, "after_days": cleanup.after_days(),
-            "message": cleanup.message(gone, kept)})
+            "message": cleanup.message(gone, kept, session=str(session),
+                                       missing=cleanup.missing(result))})
 
     def _excluded(self, method: str, query: dict[str, list[str]]) -> None:
         if method == "POST":
@@ -590,7 +594,7 @@ def excluded_message(folder: str, gone: int, kept: int) -> str:
     """What the page and the command line say after an exclusion."""
     text = f"Excluded: {folder}. {gone} document(s) under it unmanaged (the files stay)"
     if kept:
-        text += f"; {kept} kept, protected (a session on it, notes to send, or its file missing)"
+        text += f"; {kept} kept, protected (a session listens or is on it, or notes wait to be sent)"
     return text + "."
 
 

@@ -8,8 +8,9 @@
  * the picker lists the conversations of this machine (/api/sessions, open ones
  * first), filtered as the user types (title, folder, start of the id), and
  * attaching moves the document into that session's group.
- * In the header of the documents without a known session, "Cleanup files"
- * (decision of 2026-10-19): an in-page confirmation, then the batch.
+ * In the header of every group, "Cleanup files" (decision of 2026-10-19 for
+ * the documents without a known session, 2026-10-20 for each session): an
+ * in-page confirmation, then the batch, on that group only.
  * For the daemon: Restart and Stop. Start is the one control that cannot live
  * here: a stopped daemon serves no page to click it on; the tray keeps it.
  * For the tracked folders (decision of 2026-10-07): add one under the home
@@ -362,7 +363,7 @@
         'Attach each one to its conversation: otherwise Send to session opens a new one.'));
     }
     const tools = make('div', 'group-tools');
-    if (!known) tools.append(cleanupButton(docs));
+    tools.append(cleanupButton(docs, group));
     tools.append(foldable(section, head, 'session:' + group.session_id,
       known ? 'the session ' + group.title : 'the documents without a known session'));
     head.append(badge, kicker, make('h3', '', group.title), meta, tools);
@@ -518,48 +519,61 @@
   });
 
   // -- Cleanup files (decision of 2026-10-19) ----------------------------------
-  // In the header of the documents without a known session: unmanage in one
-  // batch those a batch may take, after a confirmation that counts them. Why
-  // one is protected is the daemon's answer (`protected`): the page keeps no
-  // copy of the rule. Only the documents shown when the user confirms are
-  // sent; the daemon deletes their files later, if nobody touched them.
+  // In the header of every group (the documents without a known session, and
+  // since 2026-10-20 each session): unmanage in one batch those of THAT group
+  // a batch may take, after a confirmation that counts them. Why one is
+  // protected is the daemon's answer (`protected`): the page keeps no copy of
+  // the rule, and a missing file is never protected. Only the documents shown
+  // when the user confirms are sent, with their group's session, which the
+  // daemon checks; it deletes their files later, if nobody touched them.
   const cleanupDialog = $('cleanup');
   const cleanupConfirm = $('cleanup-confirm');
   const cleanupHint = $('cleanup-hint');
+  const PROTECTED_WHY = 'a session listens or is on it, or notes wait to be sent';
   let cleanupIds = [];
+  let cleanupSession = '';
 
-  function cleanupButton(docs) {
+  function cleanupButton(docs, group) {
     const going = docs.filter((doc) => !doc.protected);
     const node = plain('Cleanup files', 'cleanup', going.length
       ? 'Unmanage the ' + plural(going.length, 'document') + ' of this group a cleanup may take; ' +
         'their files are deleted later, unless written again'
-      : 'Nothing to clean up: a session is on each document here, notes wait, or its file is missing',
-    () => openCleanup(docs));
+      : 'Nothing to clean up here: for each document, ' + PROTECTED_WHY,
+    () => openCleanup(docs, group));
     node.disabled = !going.length;
     return node;
   }
 
-  function openCleanup(docs) {
+  function openCleanup(docs, group) {
     const going = docs.filter((doc) => !doc.protected);
     const staying = docs.length - going.length;
+    const missing = going.filter((doc) => !doc.exists).length;
     const days = lastData && lastData.cleanup_after_days;
     cleanupIds = going.map((doc) => doc.id);
+    cleanupSession = group.session_id || '';
+    $('cleanup-title').textContent = cleanupSession
+      ? 'Clean up the documents of ' + group.title : 'Clean up the documents without a known session';
+    const onDisk = going.length - missing;
+    const staysOnDisk = missing ? plural(onDisk, 'file') + (onDisk === 1 ? ' stays' : ' stay')
+      : (onDisk === 1 ? 'Its file stays' : 'Their files stay');
     $('cleanup-text').textContent = plural(going.length, 'document') +
-      (going.length === 1 ? ' leaves' : ' leave') + ' the list now, with ' +
-      'the notes already sent on them. Their files stay on disk' +
-      (days ? ' for ' + days + ' days' : '') + ', then the daemon deletes them, unless they are ' +
-      'written again or listed again before.';
+      (going.length === 1 ? ' leaves the list now, with its notes.' : ' leave the list now, with their notes.') +
+      (onDisk ? ' ' + staysOnDisk + ' on disk' + (days ? ' for ' + days + ' days' : '') +
+        ', then the daemon deletes ' + (onDisk === 1 ? 'it' : 'them') +
+        ', unless written again or listed again before.' : '') +
+      (missing ? ' ' + plural(missing, 'file') + (missing === 1 ? ' is' : ' are') +
+        ' already missing: nothing to delete there.' : '');
     const list = $('cleanup-list');
     list.textContent = '';
     for (const doc of going.slice(0, 8)) {
       const item = make('li', '', (doc.title || doc.path) + ' ');
       item.append(make('span', 'mono', shortPath(doc)));
+      if (!doc.exists) item.append(' ', make('span', 'badge danger', 'file missing'));
       list.append(item);
     }
     if (going.length > 8) list.append(make('li', '', '… and ' + (going.length - 8) + ' more'));
     $('cleanup-kept').textContent = staying ? plural(staying, 'protected document') +
-      (staying === 1 ? ' stays' : ' stay') +
-      ': a session is on it, notes wait, or its file is missing.' : '';
+      (staying === 1 ? ' stays' : ' stay') + ': ' + PROTECTED_WHY + '.' : '';
     cleanupConfirm.textContent = 'Unmanage ' + plural(going.length, 'document');
     cleanupConfirm.disabled = false;
     cleanupHint.className = 'hint';
@@ -579,7 +593,7 @@
     busy = true;
     cleanupConfirm.disabled = true;
     try {
-      const answer = await call('POST', '/api/cleanup', { ids: cleanupIds });
+      const answer = await call('POST', '/api/cleanup', { session: cleanupSession, ids: cleanupIds });
       cleanupDialog.close();
       say(answer.message, false);
     } catch (err) {
@@ -752,8 +766,8 @@
       // A rescan also unmanages what is older than its window; adding a
       // folder only adds.
       const removed = scan.last.prune ? scan.last.removed + ' older one(s) removed' +
-        (scan.last.kept ? ' (' + scan.last.kept + ' kept: a session is on it, notes wait, ' +
-          'or its file is missing)' : '') + ', ' : '';
+        (scan.last.kept ? ' (' + scan.last.kept + ' kept: a session listens or is on it, ' +
+          'or notes wait)' : '') + ', ' : '';
       scanState.textContent = scan.last.error ? 'Last rescan failed: ' + scan.last.error
         : 'Last rescan: ' + scan.last.added + ' document(s) added, ' + removed +
           new Date(scan.last.ended_at).toLocaleTimeString();

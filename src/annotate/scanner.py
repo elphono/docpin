@@ -161,7 +161,8 @@ def prune(days: float, only: str | None = None, now: float | None = None, *,
     the last `days` days, all of them or those under the folder `only`; never
     a protected one (registry.protection, `listening` naming the documents a
     session waits for). The window's edge splits the files exactly as
-    `catch_up` does: newer than `since` is taken, the rest may go."""
+    `catch_up` does: newer than `since` is taken, the rest may go. A document
+    whose file is missing has no date: it goes, whatever the window."""
     start = time.time() if now is None else now
     since = start - days * DAY
     folder = Path(only) if only is not None else None

@@ -626,6 +626,26 @@ def test_cleanup_files_from_the_page_unmanages_what_it_showed_and_deletes_nothin
     assert set(registry.all_docs()) == {ids["kept.html"], ids["owned.html"]}
 
 
+def test_cleanup_files_of_a_session_never_touches_another_session(daemon, make_doc):
+    """Since 2026-10-20 every session group has its button: the batch takes
+    the documents of THAT session only, whatever ids the page sends."""
+    docs = {name: make_doc(f"<p>{name}</p>", name=f"{name}.html")
+            for name in ("mine", "mine-delivered", "theirs", "nobody")}
+    sessions = {"mine": "s-1", "mine-delivered": "s-1", "theirs": "s-2", "nobody": ""}
+    ids = {name: registry.register(path, session=sessions[name])["id"]
+           for name, path in docs.items()}
+    registry.update(ids["mine-delivered"], status="delivered")
+    status, body = daemon.request("POST", "/api/cleanup",
+                                  {"session": "s-1", "ids": list(ids.values())})
+    assert status == 200 and (body["forgotten"], body["kept"]) == (1, 1)
+    assert body["message"].startswith("1 document(s) of the session s-1 unmanaged")
+    assert set(registry.all_docs()) == {ids["mine-delivered"], ids["theirs"], ids["nobody"]}
+    assert set(registry.cleanup_index()) == {str(docs["mine"])}
+    assert daemon.request("POST", "/api/cleanup", {"session": 42})[0] == 400
+    assert daemon.request("POST", "/api/cleanup", {"session": "s-3"})[1]["forgotten"] == 0
+    assert len(registry.all_docs()) == 3
+
+
 def test_cleanup_files_needs_the_client_header_and_a_local_origin(daemon, make_doc):
     doc = registry.register(make_doc("<p>a</p>"), session="")["id"]
     conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)

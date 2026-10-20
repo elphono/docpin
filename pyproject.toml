@@ -1,6 +1,6 @@
 [project]
 name = "docpin"
-version = "0.5.0"
+version = "0.5.1"
 description = "Pin notes on the HTML documents Claude Code writes, in your browser; the notes flow back to the live session that wrote them"
 readme = "README.md"
 requires-python = ">=3.12"

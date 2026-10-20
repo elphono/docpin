@@ -1,10 +1,12 @@
-"""Cleanup files: unmanage the documents without a known session, and delete
-their files a month later if nobody touched them.
+"""Cleanup files: unmanage the documents of one group of the index page, and
+delete their files a month later if nobody touched them.
 
 The group "Documents without a known session" fills with what nobody
-claims: copies a subagent made, reports of a session long gone. "Cleanup
-files" (decision of 2026-10-19), on the page or `annotate cleanup`,
-unmanages in one batch every document of that group that a batch may take
+claims: copies a subagent made, reports of a session long gone; a session's
+group, with what the session no longer needs. "Cleanup files" (decision of
+2026-10-19, in every session group since 2026-10-20), on the page or
+`annotate cleanup [--session ID]`, unmanages in one batch every document of
+that group, and of that group only, that a batch may take
 (registry.protection), and puts each file in a deletion index
 (`cleanup.json`, read and written by registry.py under its lock):
 
@@ -18,6 +20,7 @@ the loop of scanner.run), or by `annotate cleanup --run`.
 |---------------------------------------------|----------------------------------|
 | the batch deletes nothing at once           | `forget_batch` only unmanages    |
 | never a protected document in the batch     | registry.protection              |
+| a missing file always goes, and never enters the index (nothing to delete) | registry.protection, `forget_batch` |
 | only a file of the index is ever deleted    | `sweep_cleaned` walks the index, nothing else |
 | touched means kept: date or size changed, or registered again (hook, scan, rescan, `register`) | `sweep_cleaned`, registry.register drops the entry |
 | never before the delay                      | `sweep_cleaned`, `now` injected in the tests |
@@ -71,35 +74,49 @@ def day_of(epoch: float) -> str:
 
 
 def batch(listening: Callable[[str], bool], ids: object = None,
-          now: float | None = None) -> dict[str, list[dict[str, Any]]]:
-    """Unmanage the documents without a known session that a batch may take,
+          now: float | None = None, session: object = "") -> dict[str, list[dict[str, Any]]]:
+    """Unmanage the documents of one group that a batch may take: those of
+    the session `session` ("" for the documents without a known session),
     all of them or those of `ids` (what the page showed when the user
-    confirmed); each file enters the deletion index. Nothing is deleted."""
+    confirmed). A document of another group is never taken, whatever `ids`
+    says. Each file enters the deletion index; nothing is deleted."""
     if ids is not None and not (isinstance(ids, list) and all(isinstance(i, str) for i in ids)):
         raise CleanupError(f"ids must be a list of document ids, got {ids!r}")
+    if not isinstance(session, str):
+        raise CleanupError(f"session must be a session id ('' for none), got {session!r}")
     chosen = None if ids is None else set(ids)
     delay = after_days()
 
-    def unclaimed(doc: dict[str, Any]) -> bool:
-        return not doc.get("session_id") and (chosen is None or doc["id"] in chosen)
+    def in_group(doc: dict[str, Any]) -> bool:
+        return doc.get("session_id", "") == session and (chosen is None or doc["id"] in chosen)
 
-    result = registry.forget_batch(unclaimed, listening, cleanup=True, now=now)
+    result = registry.forget_batch(in_group, listening, cleanup=True, now=now)
     for item in result["forgotten"]:
         log.info("cleanup: %s unmanaged; its file is deleted in %g day(s) unless touched",
                  item["path"], delay)
     return result
 
 
-def message(gone: int, kept: int, now: float | None = None) -> str:
-    """What the page and the command line say after a batch."""
+def message(gone: int, kept: int, now: float | None = None, session: str = "",
+            missing: int = 0) -> str:
+    """What the page and the command line say after a batch; `missing` of the
+    `gone` documents had no file any more, so nothing waits for deletion."""
     moment = time.time() if now is None else now
-    text = f"{gone} document(s) without a known session unmanaged"
-    if gone:
+    group = f"of the session {session[:8]}" if session else "without a known session"
+    text = f"{gone} document(s) {group} unmanaged"
+    if gone > missing:
         text += (f"; their files are deleted on {day_of(moment + after_days() * DAY)} "
                  f"unless written again before")
+    if missing:
+        text += f"; {missing} had no file any more"
     if kept:
-        text += f"; {kept} kept, protected (a session on it, notes to send, or its file missing)"
+        text += f"; {kept} kept, protected (a session listens or is on it, or notes wait to be sent)"
     return text + "."
+
+
+def missing(result: dict[str, list[dict[str, Any]]]) -> int:
+    """How many documents a batch took had no file any more."""
+    return sum(1 for item in result["forgotten"] if not item.get("exists"))
 
 
 def listing() -> list[dict[str, Any]]:

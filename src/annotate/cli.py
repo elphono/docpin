@@ -14,7 +14,7 @@
     annotate detach <id>
     annotate folders [add | remove | exclude | unexclude <folder>]
     annotate rescan [--days N] [--folder <folder>]
-    annotate cleanup [--list | --run]
+    annotate cleanup [--session ID | --list | --run]
     annotate serve
     annotate service
     annotate tray [--uninstall] [--start] [--once]
@@ -301,6 +301,8 @@ def cmd_cleanup(args: argparse.Namespace, cfg: config.Config) -> int:
     """"Cleanup files" from the command line (cleanup.py): the batch, as the
     page's button does; `--list` the files waiting for deletion; `--run` the
     deletions due now, without waiting for the daemon's hourly look."""
+    if args.session and (args.list or args.run_now):
+        raise cleanup.CleanupError("--session goes with the batch, not with --list or --run")
     if args.list:
         items = cleanup.listing()
         if not items:
@@ -316,8 +318,9 @@ def cmd_cleanup(args: argparse.Namespace, cfg: config.Config) -> int:
         print(f"{len(swept['deleted'])} file(s) deleted, {len(swept['released'])} kept "
               f"(touched or listed again since their cleanup, or gone)")
         return 0
-    result = cleanup.batch(_listeners(cfg))
-    print(cleanup.message(len(result["forgotten"]), len(result["kept"])))
+    result = cleanup.batch(_listeners(cfg), session=args.session or "")
+    print(cleanup.message(len(result["forgotten"]), len(result["kept"]),
+                          session=args.session or "", missing=cleanup.missing(result)))
     _print_kept(result["kept"])
     return 0
 
@@ -448,9 +451,12 @@ def parser() -> argparse.ArgumentParser:
                    help="only this tracked folder (and only what is under it is unmanaged)")
     p.set_defaults(run=cmd_rescan)
 
-    p = sub.add_parser("cleanup", help="unmanage the documents without a known session; "
-                                       "their files are deleted later if untouched")
+    p = sub.add_parser("cleanup", help="unmanage the documents without a known session "
+                                       "(or of one session); their files are deleted later "
+                                       "if untouched")
     what = p.add_mutually_exclusive_group()
+    p.add_argument("--session", default=None,
+                   help="the documents of this session (default: those without a known one)")
     what.add_argument("--list", action="store_true",
                       help="the files waiting for deletion, and when")
     # `run` is the attribute every command sets for main(): not this flag's.

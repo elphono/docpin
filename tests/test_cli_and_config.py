@@ -237,6 +237,11 @@ def test_cleanup_from_the_command_line_lists_and_runs_the_deletions(make_doc, ca
     assert capsys.readouterr().out == (f"deleted {path}\n1 file(s) deleted, 0 kept (touched "
                                        f"or listed again since their cleanup, or gone)\n")
     assert not path.exists() and len(registry.all_docs()) == 1
+    assert cli.main(["cleanup", "--session", "s-1", "--list"]) == 1
+    assert "--session goes with the batch" in capsys.readouterr().err
+    assert cli.main(["cleanup", "--session", "s-1"]) == 0     # the session's own group
+    assert capsys.readouterr().out.startswith("1 document(s) of the session s-1 unmanaged")
+    assert registry.all_docs() == {}
 
 
 def test_register_for_the_hook_refuses_a_document_under_an_excluded_folder(

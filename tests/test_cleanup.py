@@ -58,6 +58,23 @@ def test_cleanup_files_unmanages_the_documents_without_a_session_and_deletes_not
     assert cleanup.batch(listening, now=T)["forgotten"] == []  # once only
 
 
+def test_a_missing_file_is_always_cleaned_up_and_never_enters_the_index(unclaimed):
+    """"file missing" wins over every protection (2026-10-20), and there is
+    nothing to delete: the document goes, cleanup.json does not grow."""
+    gone = unclaimed("gone.html")
+    doc_id = next(iter(registry.all_docs()))
+    registry.update(doc_id, status="delivered")
+    registry.replace_annotations(doc_id, [{"id": "n1", "selector": "body", "quote": "x",
+                                           "note": "never sent"}])
+    gone.unlink()
+    result = cleanup.batch(doc_id.__eq__, now=T)               # a session listens, too
+    assert [d["id"] for d in result["forgotten"]] == [doc_id] and result["kept"] == []
+    assert cleanup.missing(result) == 1
+    assert registry.all_docs() == {} and registry.cleanup_index() == {}
+    assert not registry.cleanup_path().exists() or "gone.html" not in \
+        registry.cleanup_path().read_text()
+
+
 def test_a_cleaned_file_untouched_for_thirty_days_is_deleted_and_not_before(unclaimed, caplog):
     path = unclaimed()
     cleanup.batch(nobody, now=T)
@@ -229,8 +246,12 @@ def test_the_message_names_the_day_of_deletion():
     assert cleanup.message(2, 1, now=T) == (
         f"2 document(s) without a known session unmanaged; their files are deleted on "
         f"{cleanup.day_of(DUE)} unless written again before; 1 kept, protected "
-        f"(a session on it, notes to send, or its file missing).")
+        f"(a session listens or is on it, or notes wait to be sent).")
     assert cleanup.message(0, 0, now=T) == "0 document(s) without a known session unmanaged."
+    assert cleanup.message(1, 0, now=T, session="s-123456789", missing=1) == (
+        "1 document(s) of the session s-123456 unmanaged; 1 had no file any more.")
+    assert cleanup.message(2, 0, now=T, missing=1).startswith(
+        "2 document(s) without a known session unmanaged; their files are deleted on ")
 
 
 @pytest.fixture

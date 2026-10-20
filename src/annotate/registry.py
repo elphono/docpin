@@ -501,25 +501,29 @@ def protection(doc: dict[str, Any]) -> str:
     """Why a batch must leave this document listed, or "" if it may go.
 
     The batches are the rescan (documents older than its window), an excluded
-    folder (documents under it) and "Cleanup files" (documents without a
-    known session). Written once, here: each batch asks it under the lock,
-    and the page reads its answer (`protected` in /api/docs) instead of
-    keeping a copy. `doc` is a `summary()` item with `listening`; a field
-    that is absent counts as the protecting value.
+    folder (documents under it) and "Cleanup files" (the documents of one
+    group). Written once, here: each batch asks it under the lock, and the
+    page reads its answer (`protected` in /api/docs) instead of keeping a
+    copy. `doc` is a `summary()` item with `listening`; a field that is
+    absent counts as the protecting value.
 
     | Reason                          | Why it stays                          |
     |---------------------------------|---------------------------------------|
     | a session listens for its notes | its `annotate wait` would lose the document |
     | `delivered`                     | the session is on it, its answer comes |
-    | its file is missing             | nothing to judge the age by, and the user should see it |
     | notes wait to be sent           | an Unmanage drops the annotations     |
+
+    **A document whose file is missing is never protected** (decision of
+    2026-10-20, the user: "file missing" wins over every other label): there
+    is nothing left to read, to answer, or to judge the age of, so every
+    batch takes it, whatever it carries, and the rescan whatever its window.
     """
+    if not doc.get("exists", True):
+        return ""
     if doc.get("listening", True):
         return "a session listens for its notes"
     if doc.get("status") == "delivered":
         return "the session is on it"
-    if not doc.get("exists", False):
-        return "its file is missing"
     if doc.get("pending", 1):
         return "notes wait to be sent"
     return ""
@@ -533,7 +537,8 @@ def forget_batch(select: Callable[[dict[str, Any]], bool],
     stays, remembered in forgotten.json). `select` and `protection` see the
     document as `summary()` shows it, with `listening(id)`. With `cleanup`
     ("Cleanup files" only), each file also enters the deletion index with
-    its date and size at `now` (cleanup.py): nothing is deleted here.
+    its date and size at `now` (cleanup.py): nothing is deleted here. A
+    missing file never enters it: there is nothing to delete.
 
     Returns {"forgotten": [items], "kept": [{"id", "path", "reason"}]}: what
     went, and what was picked but protected."""

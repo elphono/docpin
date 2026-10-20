@@ -238,23 +238,69 @@ try {
     document.getElementById('message').textContent.startsWith('No longer excluded'));
   step('exclusion removed: ' + (await page.locator('#message').textContent()));
 
+  // Cleanup files in every group (2026-10-20), and in a session's group it
+  // takes the documents of THAT session only: Foxtrot, in the untitled
+  // session, whose file is missing (never protected), goes; nothing of
+  // another group moves, though Juliet and Golf could be taken.
+  const groupCount = await page.locator('#groups .group').count();
+  const buttons = await page.locator('#groups .group > .group-head .group-tools .cleanup').count();
+  if (groupCount !== 4 || buttons !== groupCount) fail('Cleanup files per group: ' + buttons + '/' + groupCount);
+  const idsBefore = await page.evaluate(() => [...document.querySelectorAll('#groups .doc')].map((n) => n.dataset.id));
+  const foxtrotId = await row('Foxtrot').getAttribute('data-id');
+  await group('Other session').screenshot({ path: join(outDir, 'index-session-group.png') });
+  const untitled = group('session s-untitl');
+  await untitled.getByRole('button', { name: 'Cleanup files' }).click();
+  await page.waitForSelector('#cleanup[open]');
+  const sessionDialog = await page.evaluate(() => ['cleanup-title', 'cleanup-text', 'cleanup-kept', 'cleanup-confirm']
+    .map((id) => document.getElementById(id).textContent));
+  const sessionItems = await page.locator('#cleanup-list li').allTextContents();
+  if (sessionDialog[0] !== 'Clean up the documents of session s-untitl' ||
+      sessionDialog[1] !== '1 document leaves the list now, with its notes. 1 file is already missing: ' +
+        'nothing to delete there.' || sessionDialog[2] !== '' ||
+      sessionDialog[3] !== 'Unmanage 1 document' || sessionItems.length !== 1 ||
+      !sessionItems[0].startsWith('Foxtrot ') || !sessionItems[0].endsWith('file missing')) {
+    fail('session cleanup confirmation: ' + JSON.stringify([sessionDialog, sessionItems]));
+  }
+  step('a session group asks first: ' + sessionDialog[0] + ' | ' + sessionItems[0]);
+  await page.evaluate(() => document.getElementById('toast').classList.remove('show'));
+  await page.screenshot({ path: join(outDir, 'index-cleanup-session.png') });
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await page.screenshot({ path: join(outDir, 'index-cleanup-session-dark.png') });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await fits(375);
+  await page.screenshot({ path: join(outDir, 'index-cleanup-session-phone.png') });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.setViewportSize({ width: 1100, height: 900 });
+  await page.locator('#cleanup-confirm').click();
+  await page.waitForFunction(() => !document.getElementById('cleanup').open &&
+    document.getElementById('message').textContent === '1 document(s) of the session s-untitl unmanaged; ' +
+      '1 had no file any more.');
+  await page.waitForFunction((gone) => !document.querySelector('#groups .doc[data-id="' + gone + '"]'), foxtrotId);
+  const idsAfter = await page.evaluate(() => [...document.querySelectorAll('#groups .doc')].map((n) => n.dataset.id));
+  const expected = idsBefore.filter((id) => id !== foxtrotId).sort();
+  if (JSON.stringify(idsAfter.sort()) !== JSON.stringify(expected)) {
+    fail('a session cleanup touched another group: ' + JSON.stringify([idsBefore, idsAfter]));
+  }
+  step('session cleanup: ' + (await page.locator('#message').textContent()) + '; every other document stays');
+
   await page.locator('#days').selectOption('30');
   await page.getByRole('button', { name: 'Rescan all folders' }).click();
   await page.waitForFunction(() => document.getElementById('message').textContent.startsWith('Rescan started'));
   // A rescan also clears (2026-10-19): Juliet, 40 days old, leaves the list;
-  // Foxtrot, as old by the registry but missing on disk, is protected.
+  // Echo, as old, is delivered (the session is on it): protected.
   await page.waitForFunction(() => document.getElementById('scan-state').textContent
     .includes('0 document(s) added, 1 older one(s) removed (1 kept'));
   await page.waitForFunction(() => !document.getElementById('groups').textContent.includes('Juliet'));
   if (await page.locator('.doc', { hasText: 'Bravo' }).count()) fail('the rescan brought back an unmanaged document');
-  if (!(await page.locator('.doc', { hasText: 'Foxtrot' }).count())) fail('the rescan took a protected document');
+  if (!(await page.locator('.doc', { hasText: 'Echo' }).count())) fail('the rescan took a protected document');
   step('rescan: ' + (await page.locator('#scan-state').textContent()));
 
-  // Folding (2026-10-19): a session group (its chevron) and a repository
-  // section (its header) fold, keep their count, and stay folded across a
-  // redraw and a reload; unfolded, nothing is left in the storage.
+  // Folding (2026-10-19): a session group (its chevron) and the folder
+  // section that holds it (its header) fold, keep their count, and stay
+  // folded across a redraw and a reload; unfolded, nothing is left in the
+  // storage. The group folds first: once its section is folded, it is hidden.
   const other = group('Other session');
-  const repoBox = page.locator('#groups > .repo', { has: page.locator('h2', { hasText: /^repo$/ }) });
+  const repoBox = page.locator('#groups > .repo', { has: page.locator('h2', { hasText: /^other$/ }) });
   const isFolded = (loc) => loc.evaluate((n) => n.classList.contains('folded'));
   const counts = async () => (await other.locator('.group-meta .chip', { hasText: 'document' }).textContent()).trim()
     + ' | ' + (await repoBox.locator('.repo-facts').textContent()).trim();
@@ -294,8 +340,8 @@ try {
   await page.waitForSelector('#groups .group');
   await foldedState();
   step('a reload keeps them folded (localStorage)');
-  await other.locator('.fold-toggle').click();
   await repoBox.locator('.repo-head .fold-toggle').click();
+  await other.locator('.fold-toggle').click();
   if ((await isFolded(other)) || (await isFolded(repoBox)) ||
       !(await other.locator('.doc', { hasText: 'Echo' }).isVisible())) fail('unfold');
   const kept = await page.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith('docpin.folded.')));
@@ -323,7 +369,6 @@ try {
   const unknownGroup = page.locator('#groups .group.unknown');
   const cleanupButton = unknownGroup.getByRole('button', { name: 'Cleanup files' });
   if (await cleanupButton.isDisabled()) fail('Cleanup files disabled with a document to clean');
-  if (await page.locator('#groups .group:not(.unknown) .cleanup').count()) fail('Cleanup files in a session group');
   await unknownGroup.screenshot({ path: join(outDir, 'index-unknown-group.png') });
   await page.setViewportSize({ width: 375, height: 812 });
   await unknownGroup.screenshot({ path: join(outDir, 'index-unknown-group-phone.png') });
@@ -335,9 +380,10 @@ try {
   const cleanupItems = await page.locator('#cleanup-list li').allTextContents();
   const cleanupKept = await page.locator('#cleanup-kept').textContent();
   const cleanupLabel = await page.locator('#cleanup-confirm').textContent();
-  if (!cleanupText.startsWith('1 document leaves the list now') || !cleanupText.includes('for 30 days') ||
-      JSON.stringify(cleanupItems) !== '["Golf docs/g.html"]' ||
-      !cleanupKept.startsWith('1 protected document stays') || cleanupLabel !== 'Unmanage 1 document') {
+  if (cleanupText !== '1 document leaves the list now, with its notes. Its file stays on disk for 30 ' +
+        'days, then the daemon deletes it, unless written again or listed again before.' ||
+      JSON.stringify(cleanupItems) !== '["Golf docs/g.html"]' || cleanupLabel !== 'Unmanage 1 document' ||
+      cleanupKept !== '1 protected document stays: a session listens or is on it, or notes wait to be sent.') {
     fail('cleanup confirmation: ' + JSON.stringify([cleanupText, cleanupItems, cleanupKept, cleanupLabel]));
   }
   step('Cleanup files asks first, with the count: ' + cleanupLabel + ' | ' + cleanupKept);

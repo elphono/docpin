@@ -129,8 +129,9 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     bravo = registry.register(bravo_path, session="")["id"]
     charlie_path = make_doc("<p>c</p>", name="c.html", title="Charlie")
     charlie = registry.register(charlie_path, session="s-live")["id"]
-    echo = registry.register(make_doc("<p>e</p>", name="e.html", title="Echo"),
-                             session="s-other", cwd=ws / "other")["id"]
+    echo_path = make_doc("<p>e</p>", name="e.html", title="Echo")
+    os.utime(echo_path, (now - 40 * 86400,) * 2)      # old, but delivered: a rescan keeps it
+    echo = registry.register(echo_path, session="s-other", cwd=ws / "other")["id"]
     registry.replace_annotations(echo, [{"id": "e1", "selector": "body", "quote": "e",
                                          "note": "already sent"}])
     registry.mark_sent(echo, ["e1"], registry.now_iso())
@@ -180,7 +181,8 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     assert opener.calls == []
     from annotate import folders
     delta = (reports / "delta.html").resolve()
-    assert set(registry.all_docs()) == {alpha, echo, foxtrot, hotel} and golf
+    # Foxtrot went with its session's cleanup; its file was missing: not indexed.
+    assert set(registry.all_docs()) == {alpha, echo, hotel} and golf and foxtrot
     assert golf_path.exists() and set(registry.cleanup_index()) == {str(golf_path)}
     assert registry.dismissed(juliet_path, juliet_path.stat().st_mtime) and juliet  # rescan
     assert registry.dismissed(delta, delta.stat().st_mtime)     # unmanaged by the exclusion
