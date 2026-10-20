@@ -370,9 +370,15 @@ def cmd_status(args: argparse.Namespace, cfg: config.Config) -> int:
     counts = Counter(d.get("status") for d in docs)
     listening = sum(1 for d in docs if d.get("listening"))
     parts = [f"{counts[s]} {s}" for s in registry.STATUSES if counts[s]]
-    print(f"daemon up on :{cfg.port}, {len(docs)} document(s)"
+    # Which docpin the daemon runs, and whether a restart would run another:
+    # nothing said it when an older launcher took `current` back (runtime.py).
+    version = data.get("version")
+    print(f"daemon up on :{cfg.port}" + (f", docpin {version}" if version else "")
+          + f", {len(docs)} document(s)"
           + (": " + ", ".join(parts) if parts else "")
-          + (f"; {listening} with a session listening" if listening else ""))
+          + (f"; {listening} with a session listening" if listening else "")
+          + ("; stale: its code changed on disk since it started, restart it"
+             if data.get("stale") else ""))
     return 0
 
 

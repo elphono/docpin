@@ -142,8 +142,10 @@ ne retrouve pas. « Mark as read » (`POST …/baseline`) avance la référence.
 docpin ce qu'est un document). Un plugin ne voit que son dossier : docpin est donc la racine, là où
 vit `src/`. `bin/annotate` ne lance **jamais** le code du dossier de version, que Claude Code supprime
 14 jours après une mise à jour : il le copie une fois par contenu sous `runtime/<empreinte>/` du dossier
-de données (`runtime.py`), pointe `runtime/current` dessus et exécute la copie avec le `python3` du
-système ; le démon d'une copie devient `stale` quand `current` change. Il démarre le démon à la demande
+de données (`runtime.py`), pointe `runtime/current` dessus — sauf si `current` nomme une version plus
+haute — et exécute la copie avec le `python3` du système ; le démon d'une copie devient `stale` quand
+`current` change. Depuis la 0.5.2, `current` est un **dossier** qui porte le lien `annotate ->
+../<empreinte>/annotate` (voir « Ce qui n'est pas évident »). Il démarre le démon à la demande
 (`client.ensure_daemon`, par systemd si l'unité existe) pour les commandes qui en ont besoin, jamais pour
 `status`. **Chaque changement publié change la version** (`pyproject.toml`, `__init__.py`, les deux
 `plugin.json`, égales par test) : une version épinglée identique n'atteint pas les installés.
@@ -252,6 +254,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | hors WSL, le navigateur et l'onglet passent par les outils de la plateforme (`xdg-open`, `open`, terminal natif, ou le `terminal` de `config.toml`), jamais par ceux de Windows ; sans workspace, les `docs/` du home sont des documents, mais le home n'est jamais parcouru | `tests/test_platforms.py` |
 | aucune note n'est postée à une session ouverte sur un protocole non vérifié : elles restent à envoyer, avec la raison, et jamais d'onglet ; « Resend » ne remet que le dernier lot | `test_a_session_on_an_unchecked_protocol_gets_nothing_and_the_notes_stay`, `test_resend_puts_the_last_batch_back_and_posts_it_again` |
 | le plugin n'exécute jamais le code de son dossier de version ; une copie survit à la suppression de ce dossier ; trois copies gardées, jamais celle en service ; une nouvelle version rend `stale` le démon d'une copie plus ancienne ; le raccourci Démarrage de la pastille nomme un fichier simple que chaque installation rafraîchit, jamais une copie datée ni `current` | `test_the_launcher_runs_a_copy_of_the_code_outside_the_plugin_folder`, `test_the_tray_shortcut_names_a_plain_file_that_every_install_refreshes`, `test_a_copy_survives_the_plugin_folder_being_deleted`, `test_a_new_version_gets_a_copy_of_its_own_and_three_are_kept`, `test_a_daemon_running_a_copy_turns_stale_when_a_new_version_is_installed` |
+| `current` ne revient jamais à une version plus basse : un lanceur de la 0.5.1 ou d'avant (code figé, rejoué tel quel depuis `tests/legacy/`) s'arrête sur « Is a directory » sans toucher `current`, le script de la pastille ni les copies ; un lanceur neuf d'une version plus basse exécute sa copie et laisse `current` ; les versions se comparent en nombres ; jamais d'élagage de la copie que `current` nomme, et l'élagage garde les versions les plus hautes avant les plus récentes (la copie qu'un ancien lanceur fait juste avant d'échouer ne chasse pas celle d'un démon pas encore redémarré) ; le démon démarré à la demande sans unité exécute `current`, comme l'unité | `test_an_older_launcher_cannot_take_current_back`, `test_the_real_older_launcher_stops_with_an_error_and_changes_nothing`, `test_while_current_was_a_link_an_older_launcher_took_it_back` (le témoin), `test_a_lower_version_runs_its_own_copy_and_leaves_current_alone`, `test_a_higher_version_takes_current_each_time`, `test_the_copy_current_names_is_never_pruned`, `test_the_copy_current_names_is_kept_even_ranked_below_copies_of_its_version`, `test_the_copies_older_launchers_leave_go_before_the_one_a_daemon_still_runs`, `test_the_on_demand_start_runs_the_copy_current_names_not_the_launchers` |
 | la consigne nomme `annotate` sans chemin seulement quand il est sur le PATH de la session (hook de plugin, ou PATH) ; un dossier `annotate/` du projet ne remplace pas le paquet | `test_the_plugin_hook_tells_the_session_to_run_annotate_by_name`, `test_a_launcher_off_the_path_is_called_back_by_its_own_path`, `test_a_project_folder_named_annotate_cannot_stand_in_for_the_package` |
 | le démarrage à la demande ne vise que les commandes qui en ont besoin, et ne lance jamais un second démon | `test_the_launcher_starts_the_daemon_only_for_commands_that_need_it`, `test_a_running_daemon_is_never_started_twice` |
 | les manifestes portent la version du paquet ; Claude Code valide la marketplace sans autre avertissement que ce `CLAUDE.md` | `test_every_manifest_carries_the_package_version`, job `plugin` de la CI |
@@ -356,6 +359,23 @@ périmée depuis la 0.4.0 arrêtait la campagne après une heure, le 2026-10-14)
   résout le lien, si bien qu'un chemin passé par `current` devient la copie datée. La 0.3.4 avait ce
   défaut, invisible au test parce que le double de `windows_path` ne résolvait rien. Le raccourci
   Démarrage vise donc `runtime/tray.ps1`, un fichier simple que chaque installation rafraîchit.
+- **Le lanceur d'une version plus ancienne reste sur le PATH des sessions ouvertes avant la mise à
+  jour, et il ramenait `current` en arrière** (mesuré trois fois les 19 et 20 octobre). Claude Code garde
+  14 jours les anciennes versions ; une session ouverte avant une mise à jour, et ses sous-agents, ont
+  encore le `bin/annotate` de l'ancienne sur leur PATH. Un simple `annotate status` y recopiait son code
+  et repointait `current` : le démon neuf passait `stale`, et le redémarrage suivant de l'unité
+  (`PYTHONPATH=runtime/current`) relançait l'ancienne version. Ce code-là est figé, on ne peut pas le
+  corriger : il remplace `current` par `os.replace` d'un nouveau lien, et `rename(2)` refuse de mettre un
+  lien à la place d'un dossier (EISDIR). Depuis la 0.5.2, `current` est donc un dossier (le lien
+  `annotate` à l'intérieur, remplacé atomiquement, et un `README.txt` qui dit pourquoi) : un lanceur
+  0.3.3 à 0.5.1 s'arrête sur « error: cannot install the code under …: Is a directory » **avant** de
+  toucher `current`, `tray.ps1` ou les copies, et ce que la session ouverte avant la mise à jour doit
+  faire, c'est redémarrer. L'unité n'a pas changé. À partir de la 0.5.2, un lanceur neuf ne pointe jamais
+  `current` vers une version plus basse que celle qu'il nomme (nombres, pas dates : 0.10.0 > 0.9.0 ; une
+  version égale passe, pour un clone chargé en place), sous un verrou borné (`runtime/.lock`). Le point
+  faible restant : un dossier `current` supprimé à la main laisse un ancien lanceur refaire son lien,
+  jusqu'au prochain lanceur neuf. Revenir volontairement à une version ≤ 0.5.1 demande de supprimer ce
+  dossier.
 - **Un transcript reçu commence dans le dossier de l'AUTRE machine** (2026-10-13, attrapé par le test de
   l'aller-retour à trois trajets). `claude.cwd_of` lit le premier `cwd` : pour une session venue d'ailleurs,
   c'est un chemin de l'autre poste, qui peut exister ici (même nom d'utilisateur, même arborescence) et

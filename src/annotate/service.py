@@ -136,8 +136,13 @@ def write_unit() -> Path:
 def start_daemon() -> str:
     """Start the daemon in the background, for the plugin's on-demand start
     (decision Q5): through systemd when the unit exists, else as a process of
-    its own session, logging to `daemon.log` of the data folder. Returns how."""
-    from . import config
+    its own session, logging to `daemon.log` of the data folder. Returns how.
+
+    Under the plugin, the process runs the copy `runtime.current()` names,
+    as the unit does, never the launcher's own: a launcher of a lower version
+    (runtime.py) would otherwise start a lower daemon."""
+    from . import config, runtime
+    env = {**os.environ, "PYTHONPATH": str(runtime.current())} if from_plugin() else None
     if unit_path().is_file():
         try:
             subprocess.Popen(["systemctl", "--user", "--no-block", "start", UNIT_NAME],
@@ -152,7 +157,7 @@ def start_daemon() -> str:
         with open(folder / "daemon.log", "ab") as log:
             subprocess.Popen([sys.executable, "-P", "-m", "annotate", "serve"],
                              stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                             cwd=folder, start_new_session=True)
+                             cwd=folder, start_new_session=True, env=env)
     except OSError as exc:
         raise ServiceError(f"cannot start the daemon: {exc}") from exc
     return "process"

@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""`annotate` on the PATH of a Claude Code session, from the docpin plugin.
+
+Claude Code puts the plugin's `bin/` on the PATH of the Bash tool (measured
+2026-10-12), and the hook calls this file too. It never runs the package from
+the plugin's folder, which Claude Code deletes 14 days after an update: it
+copies it once into the data folder (src/annotate/runtime.py) and runs the
+copy, with the system's `python3`. docpin has no dependency to install.
+
+`-P`: the session's working directory is not put on `sys.path`, so that a
+project with an `annotate/` folder of its own cannot stand in for this one.
+"""
+import os
+import shutil
+import sys
+
+if sys.version_info < (3, 12):
+    sys.stderr.write(f"error: docpin needs Python 3.12 or later, and `python3` is "
+                     f"{sys.version.split()[0]}\n")
+    sys.exit(1)
+
+from pathlib import Path  # noqa: E402
+
+PACKAGE = Path(__file__).resolve().parent.parent / "src" / "annotate"
+sys.path.insert(0, str(PACKAGE.parent))
+
+from annotate import runtime  # noqa: E402
+
+try:
+    HOME = runtime.install(PACKAGE)
+except runtime.LaunchError as exc:
+    sys.stderr.write(f"error: {exc}\n")
+    sys.exit(1)
+
+# How a session calls this launcher back (`annotate wait <id>`): by name when
+# it is the `annotate` of the PATH, or when Claude Code runs it for the plugin
+# (its bin/ is then on the session's PATH); else by its own path, as for a
+# clone whose hook comes from the user's settings.
+SELF = Path(__file__).resolve()
+FOUND = shutil.which("annotate")
+BY_NAME = bool(os.environ.get("CLAUDE_PLUGIN_ROOT")) or (
+    FOUND is not None and Path(FOUND).resolve() == SELF)
+
+os.execve(sys.executable, [sys.executable, "-P", "-m", "annotate", *sys.argv[1:]],
+          {**os.environ, "PYTHONPATH": str(HOME),
+           "ANNOTATE_LAUNCHER": "annotate" if BY_NAME else str(SELF),
+           "ANNOTATE_AUTOSTART": os.environ.get("ANNOTATE_AUTOSTART", "1")})

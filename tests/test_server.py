@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+import annotate
 from annotate import browser, claude, listeners, registry, sender, server
 from annotate.config import Config
 from fakes import RecordingOpener, compact, conversation, register_session, transcript
@@ -554,6 +555,7 @@ def test_a_daemon_says_when_its_code_changed_on_disk_since_it_started(daemon, tm
     # by repository while the daemon, started the day before, still ran the
     # Python that sent no repository, and the page drew wrong groups silently.
     assert daemon.request("GET", "/api/docs")[1]["stale"] is False   # the real code, untouched
+    assert daemon.request("GET", "/api/docs")[1]["version"] == annotate.__version__
     code = tmp_path / "code"
     code.mkdir()
     (code / "registry.py").write_text("x = 1\n")

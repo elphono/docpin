@@ -9,6 +9,7 @@
                                              by session (`open`: a live process of it) and
                                              by repository; `stale`: the code on disk
                                              changed since the daemon started;
+                                             `version`: the docpin it runs;
                                              `protected`: why a batch leaves a document
     GET    /api/docs/<id>                    one entry
     GET    /api/docs/<id>/annotations        the annotations
@@ -83,8 +84,8 @@ from types import FrameType
 from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
-from . import (browser, claude, cleanup, config, folders, gdrive, htmldoc, inbox, listeners,
-               registry, runtime, scanner, sender, service, sync, vault)
+from . import (__version__, browser, claude, cleanup, config, folders, gdrive, htmldoc, inbox,
+               listeners, registry, runtime, scanner, sender, service, sync, vault)
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -513,6 +514,7 @@ class Handler(BaseHTTPRequestHandler):
                 group["open"] = group["session_id"] in open_ids
             return self._json(HTTPStatus.OK, {"port": self.server.port, "docs": docs,
                                               "sessions": groups, "stale": self.server.stale,
+                                              "version": __version__,
                                               "cleanup_after_days": cleanup.after_days()})
         doc_id, action = rest[0], (rest[1] if len(rest) > 1 else "")
         if len(rest) > 2:

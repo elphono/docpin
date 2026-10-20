@@ -68,7 +68,7 @@ def launch(*args: str, launcher: Path = LAUNCHER, env: dict[str, str] | None = N
 
 def copies() -> list[str]:
     return sorted(p.name for p in runtime.runtime_dir().iterdir()
-                  if p.is_dir() and not p.is_symlink())
+                  if p.is_dir() and not p.is_symlink() and p != runtime.current())
 
 
 def test_the_launcher_runs_a_copy_of_the_code_outside_the_plugin_folder():
@@ -77,7 +77,7 @@ def test_the_launcher_runs_a_copy_of_the_code_outside_the_plugin_folder():
     assert done.stdout.strip() == "no document registered"
     stamp = runtime.fingerprint(ROOT / "src" / "annotate")
     assert copies() == [stamp]
-    assert os.readlink(runtime.current()) == stamp
+    assert runtime.named() == stamp
     assert (runtime.current() / "annotate" / "static" / "annotate.js").is_file()
     launch("list")
     assert copies() == [stamp]                       # a second run reuses the copy
@@ -104,7 +104,7 @@ def test_a_new_version_gets_a_copy_of_its_own_and_three_are_kept(tmp_path):
         launcher = plugin_version(tmp_path, f"v{round_}", f"version {round_}")
         assert launch("list", launcher=launcher).returncode == 0
         stamp = runtime.fingerprint(launcher.parent.parent / "src" / "annotate")
-        assert os.readlink(runtime.current()) == stamp
+        assert runtime.named() == stamp
         seen.append(stamp)
         time.sleep(0.02)                             # distinct folder dates
     assert len(set(seen)) == 4
@@ -283,7 +283,7 @@ def test_the_tray_shortcut_names_a_plain_file_that_every_install_refreshes(tmp_p
     a reparse point through wsl.localhost): the shortcut names a plain file."""
     from annotate import tray
     runtime.install(ROOT / "src" / "annotate")
-    dated = runtime.current().resolve() / "annotate"            # what __file__ resolves to
+    dated = (runtime.current() / "annotate").resolve()          # what __file__ resolves to
     script = tray.script(dated)
     assert script == runtime.tray_script()
     assert script.resolve() == script                          # no symlink on the way
