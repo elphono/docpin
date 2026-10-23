@@ -64,7 +64,7 @@ vit qu'à un endroit** : le hook passe tout `.html` à `annotate register --hook
 `folders.json`) : une session qui construit une application écrit des `.html` qui sont ses pages,
 pas des documents, et ils entraient dans la liste. Mêmes règles qu'un dossier suivi (sous `~`,
 absolu, existant) ; `folders.wanted` le consulte, donc le hook, le parcours, le rescan et
-`is-document` (visual-first) aussi, sans autre copie. Exclure un dossier passe aussitôt en
+`is-document` (que le contrôle d'eli appelle) aussi, sans autre copie. Exclure un dossier passe aussitôt en
 « Unmanage » les documents listés dessous (`forgotten.json`), sauf les protégés
 (`registry.protection`, voir le rescan) ; retirer l'exclusion ne les ramène pas tant qu'ils ne
 sont pas réécrits.
@@ -136,10 +136,11 @@ ne retrouve pas. « Mark as read » (`POST …/baseline`) avance la référence.
 écrire **retire** la référence : comparer à une version plus ancienne marquerait comme neuf le déjà-lu.
 
 **Le dépôt est aussi une marketplace Claude Code** (2026-10-12, périmètre
-`docs/2026-10-12-perimetre-du-plugin.html`) : deux plugins, `docpin` à la racine (`.claude-plugin/`,
-`hooks/hooks.json`, `bin/annotate`, le skill `skills/annotatable-documents/`) et `visual-first` sous
-`plugins/visual-first/` (le style « visuel d'abord » en anglais, et `check-document.py`, qui demande à
-docpin ce qu'est un document). Un plugin ne voit que son dossier : docpin est donc la racine, là où
+`docs/2026-10-12-perimetre-du-plugin.html`) : un plugin, `docpin` à la racine (`.claude-plugin/`,
+`hooks/hooks.json`, `bin/annotate`, le skill `skills/annotatable-documents/`). Le second, `visual-first`
+(le style « visuel d'abord » et le contrôle des documents), est **passé dans eli le 2026-10-23**
+(<https://github.com/elphono/eli>, marketplace à part) ; eli demande toujours à docpin ce qu'est un
+document par `annotate is-document`, qui reste donc ici. Un plugin ne voit que son dossier : docpin est donc la racine, là où
 vit `src/`. `bin/annotate` ne lance **jamais** le code du dossier de version, que Claude Code supprime
 14 jours après une mise à jour : il le copie une fois par contenu sous `runtime/<empreinte>/` du dossier
 de données (`runtime.py`), pointe `runtime/current` dessus — sauf si `current` nomme une version plus
@@ -147,8 +148,8 @@ haute — et exécute la copie avec le `python3` du système ; le démon d'une c
 `current` change. Depuis la 0.5.2, `current` est un **dossier** qui porte le lien `annotate ->
 ../<empreinte>/annotate` (voir « Ce qui n'est pas évident »). Il démarre le démon à la demande
 (`client.ensure_daemon`, par systemd si l'unité existe) pour les commandes qui en ont besoin, jamais pour
-`status`. **Chaque changement publié change la version** (`pyproject.toml`, `__init__.py`, les deux
-`plugin.json`, égales par test) : une version épinglée identique n'atteint pas les installés.
+`status`. **Chaque changement publié change la version** (`pyproject.toml`, `__init__.py`,
+`.claude-plugin/plugin.json`, égales par test) : une version épinglée identique n'atteint pas les installés.
 
 **Une conversation peut passer sur l'autre machine de l'utilisateur** (2026-10-13, `sync.py`, guide
 `docs/2026-10-13-synchro-entre-machines.html`). « Send » scelle le transcript (`vault.py` : gzip, puis
@@ -258,7 +259,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | la consigne nomme `annotate` sans chemin seulement quand il est sur le PATH de la session (hook de plugin, ou PATH) ; un dossier `annotate/` du projet ne remplace pas le paquet | `test_the_plugin_hook_tells_the_session_to_run_annotate_by_name`, `test_a_launcher_off_the_path_is_called_back_by_its_own_path`, `test_a_project_folder_named_annotate_cannot_stand_in_for_the_package` |
 | le démarrage à la demande ne vise que les commandes qui en ont besoin, et ne lance jamais un second démon | `test_the_launcher_starts_the_daemon_only_for_commands_that_need_it`, `test_a_running_daemon_is_never_started_twice` |
 | les manifestes portent la version du paquet ; Claude Code valide la marketplace sans autre avertissement que ce `CLAUDE.md` | `test_every_manifest_carries_the_package_version`, job `plugin` de la CI |
-| le contrôle de visual-first bloque un livrable Markdown et un HTML sans visuel (un Mermaid n'en est pas un), avertit au-delà de 4 paragraphes par visuel et sur une ressource réseau, et demande à docpin, par sa copie stable, ce qu'est un document | `tests/test_visual_first.py` |
+| `annotate is-document` répond comme la règle des dossiers, pour un `.html` et pour un `.md` (jugé comme son jumeau HTML) : le contrôle d'eli, qui a repris celui de visual-first le 2026-10-23, s'y fie | `test_is_document_answers_as_the_folders_rule_for_html_and_markdown`, `test_register_for_the_hook_refuses_a_document_under_an_excluded_folder` |
 | la synchro : rien ne part d'un dossier non autorisé ; une machine ne reçoit jamais son propre envoi ; un fichier illisible (phrase secrète fausse, abîmé) est signalé une fois et jamais retéléchargé, un stockage injoignable est réessayé ; un envoi remplace les anciens ; la page ne voit aucun secret et le fichier de réglages est en 0600 ; le stockage ne contient jamais un transcript lisible | `tests/test_sync.py` |
 | la conversation reçue va dans le clone de CETTE machine : là où l'utilisateur l'a déjà déposée, sinon un dépôt où une conversation locale a tourné (jamais un transcript reçu, dont le dossier est celui de l'autre machine), sinon le workspace | `test_a_received_transcript_is_no_evidence_of_where_a_clone_lives`, `test_a_conversation_without_a_known_clone_waits_for_its_folder` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
@@ -345,8 +346,8 @@ périmée depuis la 0.4.0 arrêtait la campagne après une heure, le 2026-10-14)
   eux sont ou contiennent un titre `h1`–`h6`** (grille de cartes, page). La teinte est une ombre intérieure : le
   fond d'un bloc marqué (une pastille numérotée) reste dessous, lisible.
 - **Le `bin/` d'un plugin est sur le PATH de l'outil Bash, pas sur celui d'un hook d'un autre plugin**
-  (mesuré le 2026-10-12, sessions de test dans un home vide) : le contrôle de visual-first ne trouvait
-  pas `annotate` et retombait sans bruit sur la règle `docs/`. Il passe désormais par la copie stable
+  (mesuré le 2026-10-12, sessions de test dans un home vide) : le contrôle de visual-first (passé dans eli le
+  2026-10-23) ne trouvait pas `annotate` et retombait sans bruit sur la règle `docs/`. Il passe désormais par la copie stable
   (`runtime/current`), dont l'emplacement ne dépend d'aucun plugin. Les variables `CLAUDE_PLUGIN_*`
   n'arrivent pas non plus aux commandes de l'outil Bash : `bin/annotate` trouve tout par son propre
   chemin. Et `--plugin-dir` sur un plugin installé le remplace pour la session, sans doubler ses hooks.

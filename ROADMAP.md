@@ -24,7 +24,9 @@ items marked **(proposal)** are ideas, not commitments.
   the notes. Its eval runs a session with and without the plugin (`claude plugin eval .`).
 - **visual-first**, an optional second plugin: an output style that draws before it writes, and a
   check that sends a session back to a Markdown document, a page without a visual, or a page that
-  loads from the network. What is a document is docpin's answer (`annotate is-document`).
+  loads from the network. What is a document is docpin's answer (`annotate is-document`). On
+  2026-10-23 it moved out of docpin, into [eli](https://github.com/elphono/eli), which still asks
+  `annotate is-document`.
 - **Native Linux and macOS** (macOS untested): the browser through `xdg-open` / `open`, the terminal
   tab through the first desktop terminal found or a `terminal` template in `config.toml`.
 - **The inbox route is guarded**: notes are posted only to a session whose peer protocol is one the

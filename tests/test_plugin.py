@@ -33,15 +33,14 @@ def test_every_manifest_carries_the_package_version():
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     version = project["project"]["version"]
     assert annotate.__version__ == version
-    for manifest in (ROOT / ".claude-plugin" / "plugin.json",
-                     ROOT / "plugins" / "visual-first" / ".claude-plugin" / "plugin.json"):
-        assert json.loads(manifest.read_text(encoding="utf-8"))["version"] == version, manifest
+    manifest = ROOT / ".claude-plugin" / "plugin.json"
+    assert json.loads(manifest.read_text(encoding="utf-8"))["version"] == version
 
 
-def test_the_marketplace_lists_both_plugins_from_this_repository():
+def test_the_marketplace_lists_docpin_alone_from_this_repository():
     market = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text("utf-8"))
     entries = {e["name"]: e["source"] for e in market["plugins"]}
-    assert entries == {"docpin": "./", "visual-first": "./plugins/visual-first"}
+    assert entries == {"docpin": "./"}          # visual-first moved to eli on 2026-10-23
     for source in entries.values():
         assert (ROOT / source / ".claude-plugin" / "plugin.json").is_file()
 

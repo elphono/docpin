@@ -255,7 +255,7 @@ def test_register_for_the_hook_refuses_a_document_under_an_excluded_folder(
     folders.exclude(str(app), listening=lambda doc_id: False)
     assert cli.main(["register", str(page), "--hook"]) == 0
     assert capsys.readouterr().out == "" and registry.all_docs() == {}
-    assert cli.main(["is-document", str(page)]) == 1           # visual-first asks the same
+    assert cli.main(["is-document", str(page)]) == 1           # the eli check asks the same
     folders.unexclude(str(app.resolve()))
     assert cli.main(["register", str(page), "--hook"]) == 0
     assert [d["path"] for d in registry.all_docs().values()] == [str(page)]
@@ -335,3 +335,19 @@ def test_folders_and_rescan_from_the_command_line(tmp_path, capsys, monkeypatch)
     assert cli.main(["folders", "remove", str(reports.resolve())]) == 1
     assert cli.main(["rescan", "--days", "0"]) == 1
     assert "not a tracked folder" in capsys.readouterr().err
+
+
+def test_is_document_answers_as_the_folders_rule_for_html_and_markdown(tmp_path, capsys):
+    """The eli check calls `annotate is-document` to know which pages are
+    documents: a Markdown file counts when its HTML twin would."""
+    from annotate import folders
+    reports = tmp_path / "reports"
+    elsewhere = tmp_path / "elsewhere"
+    reports.mkdir()
+    elsewhere.mkdir()
+    folders.add(str(reports))
+    for name in ("weekly.html", "weekly.md"):
+        assert cli.main(["is-document", str(reports / name)]) == 0, name
+        assert capsys.readouterr().out == "document\n"
+        assert cli.main(["is-document", str(elsewhere / name)]) == 1, name
+        assert capsys.readouterr().out == "not a document\n"

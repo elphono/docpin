@@ -21,7 +21,7 @@ notes, each with the passage it points at, corrects the document, and waits for 
 | | What it does | Needed? |
 |---|---|---|
 | **docpin** | the loop above: your sessions write documents you can annotate, and your notes come back to them | yes |
-| **visual-first** | sessions draw diagrams and tables instead of walls of text, and every document they write is checked: a session that writes plain text where a page with pictures was expected is sent back to it | optional, recommended |
+| [eli](https://github.com/elphono/eli) | sessions explain one level at a time, plain words and a diagram first, and every document they write is checked: a Markdown file or a page without a visual is sent back to the session | optional, recommended, a separate plugin: `/plugin install eli --marketplace elphono/eli` |
 | [epic-infographics](https://github.com/OrRon/EpicInfographics) | richer poster-like figures, as images | optional, another author's plugin: `/plugin install epic-infographics --marketplace OrRon/EpicInfographics` |
 
 That is exactly the author's setup, minus his own preferences (he writes in French).
@@ -50,8 +50,11 @@ That is exactly the author's setup, minus his own preferences (he writes in Fren
    /plugin install docpin --marketplace elphono/docpin
    ```
 
-2. Optional, recommended: `/plugin install visual-first@docpin`. To also make your sessions answer in
-   its style, pick **visual-first** in `/output-style`.
+2. Optional, recommended: install [eli](https://github.com/elphono/eli), which draws before it writes
+   and checks every document a session writes (it asks docpin which pages are documents):
+   `/plugin install eli --marketplace elphono/eli`, then pick **eli:eli** in `/output-style`.
+   If you had docpin's former **visual-first** plugin, eli replaces it: run
+   `/plugin uninstall visual-first@docpin` first, or every document is checked twice.
 3. **Start a new session.** That is all: there is nothing to configure.
 
 To try it, ask that new session for something to review, for instance *"write up how our login
@@ -139,9 +142,9 @@ a script or a helper agent wrote them, within 30 seconds.
 
 In a terminal:
 
-- Update: `claude plugin update docpin@docpin` (and `visual-first@docpin`), then start a new session.
+- Update: `claude plugin update docpin@docpin`, then start a new session.
   If the home page says **Restart daemon**, click it.
-- Uninstall: `claude plugin uninstall docpin@docpin` (and `visual-first@docpin`). Your notes stay in
+- Uninstall: `claude plugin uninstall docpin@docpin`. Your notes stay in
   `~/.local/share/annotate`; delete that folder to remove them too.
 
 ## Status

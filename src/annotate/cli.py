@@ -116,7 +116,7 @@ def cmd_wait(args: argparse.Namespace, cfg: config.Config) -> int:
 
 def cmd_is_document(args: argparse.Namespace, cfg: config.Config) -> int:
     """Exit 0 if `path` is in a folder docpin tracks, as an HTML document would
-    be, else 1: the visual-first check asks this (one rule, in folders.py),
+    be, else 1: the eli check asks this (one rule, in folders.py),
     for a Markdown file too, since it is the HTML the user should have got."""
     path = Path(args.path)
     found = folders.wanted(path.with_suffix(".html"))
