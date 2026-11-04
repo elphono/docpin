@@ -132,7 +132,8 @@ Both machines should run the same Claude Code version.
 - **Alt+click** to pin a note; select text first to quote exactly that.
 - **Send to session**. If the session is still open, the notes arrive there (Claude Code may show an
   *Approve / Deny* dialog first); if you closed it, a terminal tab reopens it.
-- Reopen the document after the correction: the changes are marked. **Mark as read** when you are done.
+- Reopen the document after the correction: what changed glows softly (green for new, blue for changed),
+  and your past notes step aside (**Show past notes** brings them back). **Mark as read** when you are done.
 
 **Which documents?** Out of the box, the HTML files a session writes in a `docs/` folder. To follow
 another folder, add it on the home page (`! annotate open` in a session). Documents also show up when

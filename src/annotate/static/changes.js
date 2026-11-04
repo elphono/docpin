@@ -1,11 +1,15 @@
 /*
  * annotate changes: draws in the live page what diff.js found.
  *
- * The page receives classes (annotate-new, annotate-changed, annotate-dim,
- * annotate-folded) and one element of its own, <annotate-fold>. Pins are
- * anchored by nth-of-type paths (selectorFor), which count siblings of the
- * SAME tag name: neither a class nor <annotate-fold> moves an anchor. Tags,
- * removed markers and old text live in the overlay layer, like the pins.
+ * The page receives classes (annotate-new, annotate-changed, annotate-folded)
+ * and one element of its own, <annotate-fold>. Pins are anchored by nth-of-type
+ * paths (selectorFor), which count siblings of the SAME tag name: neither a
+ * class nor <annotate-fold> moves an anchor.
+ *
+ * A mark is a soft glow around the block, one colour per kind, drawn by the
+ * stylesheet: no label over the page, nothing that can cover a text. A removed
+ * passage is not in the page at all: it waits, closed, in the panel. So does
+ * the text a changed block had before.
  *
  * Nothing is drawn when nothing changed (the witness), and nothing folds when
  * a change could not be found in the page: folding could hide it.
@@ -17,12 +21,14 @@
  * splits into its direct children when at least two of them are or contain a
  * heading h1-h6 (a grid of cards, a page), and each child is then a group.
  * Under a CHANGED block, a new or changed block keeps its own mark.
+ *
+ * A change inside a closed <dialog> (a zoom of an ELI document) has no box: the
+ * element that opens that dialog glows for it, and the navigator opens it.
  */
 (() => {
   'use strict';
   const HEADINGS = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6'];
   const ANY_HEADING = HEADINGS.join(',');
-  const LIST_MAX = 8;
   const IGNORED = new Set(['annotate-root', 'script', 'style', 'link', 'annotate-fold']);
 
   const make = (name, cls, text) => {
@@ -81,9 +87,9 @@
     CSS.highlights.set('annotate-added', new Highlight(...ranges));
   }
 
-  // The items to draw, in document order: the removed ones, the changed ones
-  // not inside a new part, one item per new part (an unlocated change is not
-  // here: it is counted, never drawn).
+  // The items to draw, in document order: the changed ones not inside a new
+  // part, one item per new part (an unlocated change is not here: it is
+  // counted, never drawn).
   function placeMarks(result, located) {
     const fresh = new Set(located.filter((i) => i.kind === 'new').map((i) => i.target));
     // One pass: per element, the blocks it holds and how many of them are new.
@@ -128,7 +134,6 @@
     const drawn = [];
     const shown = new Set();
     for (const item of located) {
-      if (item.kind === 'removed') { drawn.push(item); continue; }
       if (item.kind === 'changed') { if (!under(item.target)) drawn.push(item); continue; }
       const group = groupOf(item.target);
       if (!group) { drawn.push(item); continue; }
@@ -140,8 +145,17 @@
     return drawn;
   }
 
+  // What opens a closed <dialog>, by the convention of the ELI documents.
+  const openerOf = (dialog) => (dialog.id
+    ? document.querySelector('[data-zoom="' + CSS.escape(dialog.id) + '"]') : null);
+  // The element a reader can see for this node: itself, or what opens its dialog.
+  const seenAs = (node) => {
+    const dialog = node.closest('dialog');
+    return (dialog && !dialog.open && openerOf(dialog)) || node;
+  };
+
   function apply(result, opts) {
-    const { layer, flash, notes } = opts;
+    const { flash, notes } = opts;
     const items = result.changes.map((change) => ({
       kind: change.kind, change,
       target: change.kind === 'removed' ? (change.anchor && change.anchor.live) : change.unit.live,
@@ -149,23 +163,31 @@
     }));
     if (!result.tooMany && !items.length) return null;
     const located = items.filter((i) => i.target);
-    const drawn = placeMarks(result, located);
+    const gone = items.filter((i) => i.kind === 'removed');
+    const drawn = placeMarks(result, located.filter((i) => i.kind !== 'removed'));
     const drawnSet = new Set(drawn);
     const parts = drawn.filter((i) => i.part);           // a new part that is no block itself
     const absorbed = new Set(located.filter((i) => i.kind !== 'removed' && !drawnSet.has(i)));
     const counted = items.filter((i) => !absorbed.has(i)).concat(parts);
     for (const item of drawn) {
-      if (item.kind !== 'removed') item.target.classList.add(item.kind === 'new' ? 'annotate-new' : 'annotate-changed');
+      item.target.classList.add(item.kind === 'new' ? 'annotate-new' : 'annotate-changed');
     }
-    // Every block that changed, drawn or absorbed, and every new part: none is dimmed.
-    const marked = new Set(located.filter((i) => i.kind !== 'removed').concat(parts).map((i) => i.target));
+    // Whatever changed inside a closed dialog shows on what opens it.
+    for (const item of located) {
+      const seen = seenAs(item.target);
+      if (seen !== item.target && !seen.matches('.annotate-new,.annotate-changed')) {
+        seen.classList.add('annotate-changed');
+      }
+    }
     highlight(drawn);
 
     let sections = [];
     const level = foldLevel();
     if (level) sections = sectionsOf(level);
     const sectionOf = (node) => sections.find((s) => inside(s, node)) || null;
-    for (const item of located.concat(parts)) item.section = sectionOf(item.target);
+    for (const item of located.concat(parts)) {
+      item.section = sectionOf(item.target) || sectionOf(seenAs(item.target));
+    }
 
     const unfold = (sec) => {
       if (!sec.fold) return;
@@ -175,6 +197,7 @@
     };
     const fold = (sec) => {
       const blocks = result.units.filter((u) => u.live && sec.members.some((m) => m === u.live || m.contains(u.live))).length;
+      if (!blocks) return;                               // nothing to hide: no bar saying so
       const treated = notes.filter((n) => n.sent && inside(sec, n.target)).length;
       const bar = document.createElement('annotate-fold');
       bar.append(make('b', '', '▸ Already read · unchanged'),
@@ -193,128 +216,51 @@
         const changedHere = located.some((i) => i.section === sec);
         const unsent = notes.some((n) => !n.sent && inside(sec, n.target));
         if (!changedHere && !unsent) fold(sec);
-        if (changedHere) {
-          for (const u of result.units) {
-            if (!u.live || marked.has(u.live) || !inside(sec, u.live) || u.live === sec.heading) continue;
-            if ([...marked].some((m) => u.live.contains(m))) continue;
-            u.live.classList.add('annotate-dim');
-          }
-        }
       }
-    }
-
-    // Overlay layer: a tag per marked block, a marker per removed passage.
-    const tags = [];
-    const tagWidth = {};          // per kind: NEW and CHANGED tags never change size
-    let open = null;
-    const oldBox = make('div', 'chg-old');
-    oldBox.hidden = true;
-    layer.append(oldBox);
-    const showOld = (item, anchor) => {
-      oldBox.textContent = item.kind === 'removed' ? item.text : item.change.oldText;
-      oldBox.hidden = false;
-      open = { item, anchor };
-      view.layout(layer.getBoundingClientRect());
-    };
-    const hideOld = () => { oldBox.hidden = true; open = null; };
-    for (const item of drawn) {
-      const el = item.kind === 'removed'
-        ? make('button', 'chg-removed', '− removed · view')
-        : make('span', 'chg-tag ' + item.kind, item.kind === 'new' ? 'NEW' : 'CHANGED');
-      if (item.kind === 'removed') {
-        el.addEventListener('click', () => (open && open.item === item ? hideOld() : showOld(item, el)));
-      } else if (item.kind === 'changed') {
-        el.title = 'Hover: the text before';
-        el.addEventListener('mouseenter', () => showOld(item, el));
-        el.addEventListener('mouseleave', hideOld);
-      }
-      layer.append(el);
-      tags.push({ item, el });
     }
 
     let index = -1;
     const reveal = (node) => {
       for (const sec of sections) if (sec.fold && inside(sec, node)) unfold(sec);
     };
-    const go = (i) => {
-      index = i;
-      const item = drawn[i];
-      reveal(item.target);
+    // Everything between the reader and this node: a folded section, a closed
+    // <details> or zoom, another zoom open on top of the page.
+    const bringOut = (node) => {
+      reveal(node);
+      document.querySelectorAll('dialog[open]').forEach((d) => { if (!d.contains(node)) d.close(); });
+      for (let up = node.parentElement; up; up = up.parentElement) {
+        if (up.localName === 'details') up.open = true;
+      }
+      const dialog = node.closest('dialog');
+      if (dialog && !dialog.open) {
+        const opener = openerOf(dialog);
+        if (opener) { reveal(opener); opener.click(); }
+        if (!dialog.open) dialog.show();
+      }
+    };
+    const visit = (node) => {
+      bringOut(node);
       opts.changed();
-      item.target.scrollIntoView({ block: 'center' });
-      flash(item.target);
+      node.scrollIntoView({ block: 'center' });
+      flash(node);
       setTimeout(() => flash(null), 1200);
     };
+    const go = (i) => {
+      index = i;
+      follow = true;
+      visit(drawn[i].target);
+    };
+    let follow = false;          // the panel brings the current row into its list
+    let listTop = 0;             // the panel is rebuilt at each render: its scroll is kept here
+    let goneOpen = false;
     const view = {
       items: drawn,
       total: counted.length,
       hidden: (node) => Boolean(node && node.closest && node.closest('.annotate-folded')),
       reveal,
-      showAll() {
-        sections.forEach(unfold);
-        document.querySelectorAll('.annotate-dim').forEach((n) => n.classList.remove('annotate-dim'));
-      },
+      showAll() { sections.forEach(unfold); },
       next() { if (drawn.length) go((index + 1) % drawn.length); },
       prev() { if (drawn.length) go((index - 1 + drawn.length) % drawn.length); },
-      layout(origin) {
-        const placed = [];
-        for (const { item, el } of tags) {
-          const box = item.target.getBoundingClientRect();
-          const visible = (box.width || box.height) && !view.hidden(item.target);
-          el.style.display = visible ? '' : 'none';
-          if (!visible) continue;
-          if (item.kind === 'removed') {
-            // On the left, where the passage was: the bar covers the right edge.
-            const y = item.change.place === 'after' ? box.bottom + 2 : box.top - 20;
-            el.style.left = (box.left - origin.left) + 'px';
-            el.style.top = (y - origin.top) + 'px';
-            continue;
-          }
-          // Above the block, lowered into its top border and padding when it
-          // has some: never on the block's own text, less on the one above.
-          // Past a rounded corner, on the straight part of the edge (never past
-          // a quarter of a small round block, a numbered dot).
-          const style = getComputedStyle(item.target);
-          const room = (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.paddingTop) || 0);
-          const corner = parseFloat(style.borderTopLeftRadius) || 0;
-          let x = box.left - origin.left + Math.max(6, Math.min(corner, 24, box.width / 4));
-          const y = box.top - origin.top - 17 + Math.min(16, Math.max(0, room - 1));
-          if (!tagWidth[item.kind]) tagWidth[item.kind] = el.offsetWidth;
-          const w = tagWidth[item.kind];
-          // No room above and the line above taken where the tag would go (a
-          // new item under an old one): at the right end of the block instead.
-          const prev = room < 1 && item.target.previousElementSibling;
-          if (prev && !view.hidden(prev)) {
-            const range = document.createRange();
-            range.selectNodeContents(prev);
-            const lines = [...range.getClientRects()].filter((r) => r.width &&
-              r.bottom - origin.top > y + 1 && r.top - origin.top < y + 15);
-            const covers = (px) => lines.some((r) => r.left - origin.left < px + w && r.right - origin.left > px);
-            const right = box.right - origin.left - w - 6;
-            if (covers(x) && right > x && !covers(right)) x = right;
-          }
-          // Never on a tag placed just before (a dot beside its title, a first
-          // child at its parent's tab): slide right past it.
-          const near = placed.slice(-8);
-          for (let moved = true; moved;) {
-            moved = false;
-            for (const p of near) {
-              if (x < p.x + p.w + 2 && p.x < x + w + 2 && Math.abs(y - p.y) < 17) {
-                x = p.x + p.w + 4;
-                moved = true;
-              }
-            }
-          }
-          placed.push({ x, y, w });
-          el.style.left = x + 'px';
-          el.style.top = y + 'px';
-        }
-        if (open) {
-          const a = open.anchor.getBoundingClientRect();
-          oldBox.style.left = (a.left - origin.left) + 'px';
-          oldBox.style.top = (a.bottom - origin.top + 4) + 'px';
-        }
-      },
       panel() {
         const box = make('div', 'chg');
         box.append(make('div', 'chg-head', 'Changes since your last send'));
@@ -334,27 +280,61 @@
           box.append(make('div', 'chg-lost', result.lost + ' change' + (result.lost === 1 ? '' : 's') +
             ' not located: the page differs from the file (a script?); nothing is folded.'));
         }
-        const navBar = make('div', 'chg-nav');
-        const up = make('button', '', '▲');
-        const down = make('button', '', '▼');
-        up.addEventListener('click', () => view.prev());
-        down.addEventListener('click', () => view.next());
-        navBar.append(up, make('span', '', (index < 0 ? '–' : index + 1) + ' / ' + drawn.length), down);
-        box.append(navBar);
-        const list = make('ul', 'chg-list');
-        drawn.slice(0, LIST_MAX).forEach((item, i) => {
-          const row = make('li', i === index ? 'cur' : '');
-          const where = item.section ? cut(item.section.heading.textContent.trim(), 18) + ' · ' : '';
-          // A new block that holds absorbed ones reads by all its text, not its
-          // own (a card's own text is its number). A removed row keeps its text.
-          const holds = item.kind === 'new' && !item.part && [...absorbed].some((a) => item.target.contains(a.target));
-          const text = holds ? item.target.innerText.replace(/\s+/g, ' ').trim() : item.text;
-          row.append(make('i', 'dot ' + item.kind), make('span', '', where + cut(text, 44)));
-          row.addEventListener('click', () => go(i));
-          list.append(row);
-        });
-        if (drawn.length > LIST_MAX) list.append(make('li', 'more', '+' + (drawn.length - LIST_MAX) + ' more'));
-        box.append(list);
+        if (drawn.length) {
+          const navBar = make('div', 'chg-nav');
+          const up = make('button', '', '▲');
+          const down = make('button', '', '▼');
+          up.addEventListener('click', () => view.prev());
+          down.addEventListener('click', () => view.next());
+          navBar.append(up, make('span', '', (index < 0 ? '–' : index + 1) + ' / ' + drawn.length), down);
+          box.append(navBar);
+          const list = make('ul', 'chg-list');
+          let current = null;
+          drawn.forEach((item, i) => {
+            const row = make('li', i === index ? 'cur' : '');
+            const where = item.section ? cut(item.section.heading.textContent.trim(), 18) + ' · ' : '';
+            // A new block that holds absorbed ones reads by all its text, not its
+            // own (a card's own text is its number).
+            const holds = item.kind === 'new' && !item.part && [...absorbed].some((a) => item.target.contains(a.target));
+            const text = holds ? item.target.innerText.replace(/\s+/g, ' ').trim() : item.text;
+            row.append(make('i', 'dot ' + item.kind), make('span', '', where + cut(text, 44)));
+            row.addEventListener('click', () => go(i));
+            list.append(row);
+            if (i !== index) return;
+            current = row;
+            if (item.kind === 'changed' && item.change.oldText) {
+              list.append(make('li', 'chg-before', 'Before: ' + item.change.oldText));
+            }
+          });
+          list.addEventListener('scroll', () => { listTop = list.scrollTop; });
+          box.append(list);
+          // Once the panel is in the bar: an element out of it has no scroll.
+          queueMicrotask(() => {
+            list.scrollTop = listTop;
+            if (follow && current) {
+              const top = current.offsetTop - list.offsetTop;
+              if (top < list.scrollTop || top + current.offsetHeight > list.scrollTop + list.clientHeight) {
+                list.scrollTop = top;
+              }
+            }
+            follow = false;
+          });
+        }
+        if (gone.length) {
+          const toggle = make('button', 'chg-gone-toggle', (goneOpen ? '▾ ' : '▸ ') + gone.length +
+            ' removed passage' + (gone.length === 1 ? '' : 's'));
+          toggle.addEventListener('click', () => { goneOpen = !goneOpen; opts.changed(); });
+          box.append(toggle);
+          if (goneOpen) {
+            const list = make('ul', 'chg-list chg-gone');
+            for (const item of gone) {
+              const row = make('li', '', item.text);
+              if (item.target) row.addEventListener('click', () => visit(item.target));
+              list.append(row);
+            }
+            box.append(list);
+          }
+        }
         const actions = make('div', 'chg-actions');
         const all = make('button', '', 'Show everything');
         all.addEventListener('click', () => { view.showAll(); opts.changed(); });

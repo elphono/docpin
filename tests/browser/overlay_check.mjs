@@ -114,9 +114,14 @@ try {
   const counts = await page.locator('.counts').textContent();
   if (!counts.startsWith('0 to send')) fail('counts after send: ' + counts);
   step('send delivered, bar: ' + counts);
-  const sentPin = await page.locator('.pin.sent').count();
-  if (sentPin !== 2) fail('the sent pins are not greyed');
-  step('sent pins greyed');
+  // A sent note is history: its pin hides, the orphan leaves the bar (the model
+  // keeps it: tests/test_browser.py), until the reader asks for the past notes.
+  if (await page.locator('.pin.sent').count() !== 2) fail('the sent pins are not greyed');
+  if (await page.locator('.pin:visible').count()) fail('a sent pin shows by default');
+  if (await page.locator('.orphan').count()) fail('a sent orphan is still listed');
+  await page.locator('.past-toggle').click();
+  if (await page.locator('.pin.sent:visible').count() !== 2) fail('past notes not shown on request');
+  step('sent pins greyed and hidden, shown on request; the sent orphan left the bar');
   if ((await page.locator('.bar-actions button', { hasText: 'Resend' }).count()) !== 1) {
     fail('Resend not offered once every note is sent');
   }

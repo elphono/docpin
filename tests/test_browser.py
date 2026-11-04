@@ -305,6 +305,80 @@ LISTS_B = (LISTS_A
                     + "</div></section>"))
 
 
+ZOOM_A = ("<main><h2>Cards</h2><div data-zoom='z-1' tabindex='0'>First card</div>"
+          "<div data-zoom='z-2' tabindex='0'>Second card</div></main>"
+          "<dialog id='z-1'><h2>First zoom</h2><p>The original sentence of this zoom.</p></dialog>"
+          "<dialog id='z-2'><div><h2>Second zoom</h2></div><p>A sentence nobody touches.</p></dialog>"
+          "<script>document.querySelectorAll('[data-zoom]').forEach((c) => c.addEventListener("
+          "'click', () => document.getElementById(c.dataset.zoom).show()));</script>")
+ZOOM_B = ZOOM_A.replace("The original sentence of this zoom.", "The rewritten sentence of this zoom.")
+
+NOTES_SCRIPT = Path(__file__).resolve().parent / "browser" / "notes_check.mjs"
+NOTES_DOC = ("<main><p id='kept'>This passage is still here.</p>"
+             "<p id='rewritten'>This passage has new words.</p>"
+             "<button data-zoom='z-1' id='open'>Open the zoom</button>"
+             "<details id='fold'><summary>A summary line</summary><p id='in-fold'>Inside.</p></details>"
+             "<div hidden><p id='in-tab'>In a hidden tab.</p></div>"
+             "</main><dialog id='z-1' style='position:fixed;inset:0;width:100%;height:100%;"
+             "max-width:none;max-height:none;margin:0;padding:16px;border:0'>"
+             "<div class='box' style='max-height:300px;overflow:auto'>"
+             "<p id='in-zoom'>A cell in the zoom.</p><div style='height:900px'></div>"
+             "<p id='far'>Far down the zoom.</p></div>"
+             "<button id='close'>Close</button></dialog>"
+             "<script>document.getElementById('open').addEventListener('click', "
+             "() => document.getElementById('z-1').show());"
+             "document.getElementById('close').addEventListener('click', "
+             "() => document.getElementById('z-1').close());</script>")
+
+
+@pytest.mark.browser
+def test_past_notes_in_a_real_browser(tmp_path, make_doc):
+    """A sent note is hidden until asked for, gone with its passage, and a pin
+    only ever sits on its own passage."""
+    pw_dir = os.environ.get("ANNOTATE_PLAYWRIGHT_DIR", "")
+    node = shutil.which("node")
+    assert pw_dir and node, "see test_overlay_in_a_real_browser"
+    path = make_doc(NOTES_DOC, title="Notes check")
+    doc_id = registry.register(path, session="sess-browser")["id"]
+    cfg = config.load_config()
+    srv = server.make_server(cfg, port=0, send=sender.Sender(cfg, opener=RecordingOpener()))
+    note = lambda number, selector, quote: {          # noqa: E731
+        "id": f"n{number}", "number": number, "selector": selector, "quote": quote,
+        "note": f"note {number}", "offset_x": 4, "offset_y": 4}
+    registry.replace_annotations(doc_id, [
+        note(1, "#kept", "This passage is still here."),
+        note(2, "#rewritten", "This passage had old words."),   # the text left the anchor
+        note(3, "#deleted", "A passage that left the page."),   # the selector resolves nowhere
+        note(4, "#in-zoom", "A cell in the zoom."),
+    ])
+    srv.sender.dispatch(doc_id)                       # the four are sent
+    assert all(a["sent_at"] for a in registry.list_annotations(doc_id))
+    registry.replace_annotations(doc_id, registry.list_annotations(doc_id) + [
+        note(5, "#rewritten", "This passage had old words."),   # unsent: stays on its anchor
+        note(6, "#in-zoom", "A cell in the zoom."),             # unsent, in the closed zoom
+        note(7, "#in-fold", "Inside."),                         # unsent, in a closed <details>
+        note(8, "#deleted", "Another passage that left."),      # unsent: listed, never lost
+        note(9, "#far", "Far down the zoom."),                  # unsent, scrolled out in the zoom
+        note(10, "#in-tab", "In a hidden tab."),                # unsent, hidden by the document
+    ])
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    out = Path(os.environ.get("ANNOTATE_BROWSER_OUT", tmp_path))
+    out.mkdir(parents=True, exist_ok=True)
+    try:
+        done = subprocess.run([node, str(NOTES_SCRIPT), pw_dir, f"http://localhost:{srv.port}",
+                               doc_id, str(out)],
+                              capture_output=True, text=True, timeout=120)
+    finally:
+        srv.shutdown()
+        srv.server_close()
+    print(done.stdout)
+    assert done.returncode == 0, done.stdout + done.stderr
+    # Hidden is not deleted: a save from the page (step 6) kept every note.
+    saved = {a["number"]: a for a in registry.list_annotations(doc_id)}
+    assert sorted(saved) == list(range(1, 12))
+    assert saved[2]["note"] == "note 2" and saved[3]["note"] == "note 3"
+
+
 @pytest.mark.browser
 def test_changes_in_a_real_browser(tmp_path, make_doc):
     """What changed since the last send: marked, folded, walked, then read."""
@@ -330,7 +404,8 @@ def test_changes_in_a_real_browser(tmp_path, make_doc):
     for name, before, after in (("nested.html", NESTED_A, NESTED_B),
                                 ("mixed.html", MIXED_A, MIXED_B),
                                 ("siblings.html", NESTED_A, SIBLINGS_B),
-                                ("lists.html", LISTS_A, LISTS_B)):
+                                ("lists.html", LISTS_A, LISTS_B),
+                                ("zoom.html", ZOOM_A, ZOOM_B)):
         assert after != before
         other = make_doc(before, name=name, title=name)
         other_id = registry.register(other, session="sess-browser")["id"]

@@ -1,7 +1,7 @@
 // Drives "what changed since the last send" in a real headless Chromium.
 //
 //   node changes_check.mjs <playwright-dir> <base-url> <doc-id> <out-dir> <doc-path> \
-//        <nested-doc-id> <mixed-doc-id> <siblings-doc-id> <lists-doc-id>
+//        <nested-doc-id> <mixed-doc-id> <siblings-doc-id> <lists-doc-id> <zoom-doc-id>
 //
 // The Python side (tests/test_browser.py) sent version A of the document,
 // wrote version B, and checks afterwards what reached the server. First the
@@ -12,9 +12,9 @@ import { createRequire } from 'node:module';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-const [pwDir, base, docId, outDir, docPath, nestedId, mixedId, siblingsId, listsId] = process.argv.slice(2);
-if (!nestedId || !mixedId || !siblingsId || !listsId) {
-  console.error('FAIL the nested, mixed, siblings and lists document ids are missing');
+const [pwDir, base, docId, outDir, docPath, nestedId, mixedId, siblingsId, listsId, zoomId] = process.argv.slice(2);
+if (!nestedId || !mixedId || !siblingsId || !listsId || !zoomId) {
+  console.error('FAIL the nested, mixed, siblings, lists and zoom document ids are missing');
   process.exit(1);
 }
 const require = createRequire(join(pwDir, 'package.json'));
@@ -57,6 +57,12 @@ try {
   if (pure.myersEdits !== 5) fail('myers is not minimal: ' + pure.myersEdits + ' edits');
   step('pure comparison: witness, nested li, figure, moved, too many, minimal script');
 
+  // Nothing over the page but the notes' own pins and bubbles.
+  const noLabel = async (where) => {
+    const foreign = await page.evaluate(() => [...document.querySelector('annotate-root').shadowRoot
+      .querySelector('.layer').children].filter((n) => !n.matches('.pin,.bubble')).map((n) => n.className));
+    if (foreign.length) fail(where + ': laid over the page: ' + foreign.join(','));
+  };
   const shadow = (sel) => page.evaluate((s) =>
     [...document.querySelector('annotate-root').shadowRoot.querySelectorAll(s)].map((n) => n.textContent), sel);
   const barText = () => page.evaluate(() =>
@@ -73,9 +79,42 @@ try {
   }));
   if (marks.news.length !== 1 || !marks.news[0].includes('fourth option')) fail('new: ' + JSON.stringify(marks.news));
   if (marks.changed.length !== 1 || !marks.changed[0].includes('two days')) fail('changed: ' + JSON.stringify(marks.changed));
-  const pills = await shadow('.chg-removed');
-  if (pills.length !== 1) fail('removed markers: ' + pills.length);
+  const removedCount = (await shadow('.chg-counts .removed b'))[0];
+  if (removedCount !== '1') fail('removed count: ' + removedCount);
   step('1 new, 1 changed, 1 removed');
+
+  // 1b. A mark is a glow, one colour per kind: it moves nothing and nothing is
+  // laid over the page. The layer holds pins and nothing else.
+  const glow = await page.evaluate(() => {
+    const look = (sel) => {
+      const node = document.querySelector(sel);
+      const s = getComputedStyle(node);
+      const before = node.getBoundingClientRect();
+      const cls = sel.slice(1);
+      node.classList.remove(cls);
+      const after = node.getBoundingClientRect();
+      node.classList.add(cls);
+      return { name: s.animationName, colour: (s.boxShadow.match(/rgba?\((\d+), (\d+), (\d+)/) || []).slice(1).join(','),
+        moved: before.top !== after.top || before.height !== after.height || before.width !== after.width };
+    };
+    return { fresh: look('.annotate-new'), changed: look('.annotate-changed') };
+  });
+  if (glow.fresh.name !== 'annotate-glow' || glow.changed.name !== 'annotate-glow') fail('no glow: ' + JSON.stringify(glow));
+  if (!glow.fresh.colour || !glow.changed.colour || glow.fresh.colour === glow.changed.colour) fail('one glow colour per kind: ' + JSON.stringify(glow));
+  if (glow.fresh.moved || glow.changed.moved) fail('a mark moved its block: ' + JSON.stringify(glow));
+  await noLabel('main document');
+  step('marks glow in two colours (' + glow.fresh.colour + ' / ' + glow.changed.colour + '), move nothing, no label');
+
+  // 1c. A removed passage is nowhere until asked for, then in the panel only.
+  const REMOVED = 'Option C needs one more server';
+  const removedShown = async () => page.evaluate((t) => ({
+    page: document.body.innerText.includes(t),
+    panel: document.querySelector('annotate-root').shadowRoot.querySelector('.bar').textContent.includes(t),
+  }), REMOVED);
+  const closed = await removedShown();
+  if (closed.page || closed.panel) fail('the removed text shows while closed: ' + JSON.stringify(closed));
+  if (!(await shadow('.chg-gone-toggle'))[0].includes('1 removed passage')) fail('no closed line for the removed passage');
+  step('removed passage: not in the page, one closed line in the panel');
 
   // 2. Added words are highlighted, the unchanged ones are not.
   const words = await page.evaluate(() => {
@@ -91,16 +130,18 @@ try {
     const shown = (n) => getComputedStyle(n).display !== 'none';
     return { count: document.querySelectorAll('annotate-fold').length,
       ctx: shown(p[1]) || shown(p[2]), unsent: shown(p[6]), heading: shown(document.getElementById('s1')),
-      dim: p[3].classList.contains('annotate-dim') };
+      opacity: getComputedStyle(p[3]).opacity };
   });
-  if (folds.count !== 2 || folds.ctx || !folds.unsent || !folds.heading || !folds.dim) fail('folding: ' + JSON.stringify(folds));
-  step('Context and Decision folded, Notes open, unchanged Options block dimmed');
+  if (folds.count !== 2 || folds.ctx || !folds.unsent || !folds.heading || folds.opacity !== '1') fail('folding: ' + JSON.stringify(folds));
+  step('Context and Decision folded, Notes open, unchanged Options block left as it is');
   await page.screenshot({ path: join(outDir, 'changes-folded.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.screenshot({ path: join(outDir, 'changes-folded-dark.png'), fullPage: true });
   await page.emulateMedia({ colorScheme: 'light' });
 
-  // 4. A sent pin in a folded section is hidden; the unsent one is on its block.
+  // 4. A sent pin stays hidden even once past notes are shown, while its
+  // section is folded; the unsent one is on its block.
+  await page.evaluate(() => document.querySelector('annotate-root').shadowRoot.querySelector('.past-toggle').click());
   const pinsState = await page.evaluate(() => {
     const pins = [...document.querySelector('annotate-root').shadowRoot.querySelectorAll('.pin')];
     return pins.map((p) => ({ text: p.textContent, hidden: p.style.display === 'none' }));
@@ -109,17 +150,26 @@ try {
   if (!sentPin || !sentPin.hidden) fail('sent pin in a fold: ' + JSON.stringify(pinsState));
   step('treated pin hidden in its folded section');
 
-  // 5. The navigator walks the three changes and wraps, three rounds.
+  // 5. The navigator walks the two marks and wraps, three rounds; a removed
+  // passage is no stop, since nothing shows it in the page. The current changed
+  // block's previous text opens under its row.
   const nav = async (label) => {
     await page.evaluate((l) => [...document.querySelector('annotate-root').shadowRoot
       .querySelectorAll('.chg-nav button')].find((b) => b.textContent === l).click(), label);
     return (await shadow('.chg-nav span'))[0];
   };
   const seen = [];
-  for (let i = 0; i < 4; i++) seen.push(await nav('▼'));
-  if (seen.join('|') !== '1 / 3|2 / 3|3 / 3|1 / 3') fail('navigator down: ' + seen.join('|'));
-  if (await nav('▲') !== '3 / 3') fail('navigator up does not wrap');
-  step('navigator: ' + seen.join(' → ') + ', ▲ wraps to 3 / 3');
+  const befores = [];
+  for (let i = 0; i < 5; i++) {
+    seen.push(await nav('▼'));
+    befores.push((await shadow('.chg-before')).join(''));
+  }
+  if (seen.join('|') !== '1 / 2|2 / 2|1 / 2|2 / 2|1 / 2') fail('navigator down: ' + seen.join('|'));
+  if (await nav('▲') !== '2 / 2') fail('navigator up does not wrap');
+  if (befores.filter((b) => b.startsWith('Before: ') && b.includes('migration')).length < 2 || befores.filter((b) => !b).length < 2) {
+    fail('text before: ' + JSON.stringify(befores));
+  }
+  step('navigator: ' + seen.join(' → ') + ', ▲ wraps; the text before shows on the changed block only');
 
   // 6. Alt+click while folded: the note anchors to the block aimed at.
   const target = page.locator('body > p').nth(6);
@@ -156,18 +206,21 @@ try {
   if (!pinBack) fail('the treated pin did not come back on its block');
   step('link unfolded Context; the treated pin is back on its block');
 
-  // 8. The removed marker shows the old text; Show everything unfolds and undims.
-  await page.evaluate(() => document.querySelector('annotate-root').shadowRoot.querySelector('.chg-removed').click());
-  const old = await shadow('.chg-old');
+  // 8. The closed line opens on the removed text, its row leads to where it
+  // was; Show everything unfolds.
+  await page.evaluate(() => document.querySelector('annotate-root').shadowRoot.querySelector('.chg-gone-toggle').click());
+  const opened = await removedShown();
+  if (!opened.panel || opened.page) fail('the removed text, opened: ' + JSON.stringify(opened));
   await page.screenshot({ path: join(outDir, 'changes-removed.png') });
-  if (!old.some((t) => t.includes('Option C needs one more server'))) fail('old text: ' + JSON.stringify(old));
+  await page.evaluate(() => document.querySelector('annotate-root').shadowRoot.querySelector('.chg-gone li').click());
+  if (!(await page.evaluate(() => Boolean(document.querySelector('.annotate-flash'))))) fail('the removed row leads nowhere');
   await page.evaluate(() => [...document.querySelector('annotate-root').shadowRoot
     .querySelectorAll('.chg-actions button')].find((b) => b.textContent === 'Show everything').click());
   const after = await page.evaluate(() => ({ folded: document.querySelectorAll('.annotate-folded').length,
-    dim: document.querySelectorAll('.annotate-dim').length, fold: document.querySelectorAll('annotate-fold').length }));
-  if (after.folded || after.dim || after.fold) fail('show everything: ' + JSON.stringify(after));
+    fold: document.querySelectorAll('annotate-fold').length }));
+  if (after.folded || after.fold) fail('show everything: ' + JSON.stringify(after));
   await page.screenshot({ path: join(outDir, 'changes-open.png'), fullPage: true });
-  step('removed text shown struck; Show everything unfolded and undimmed');
+  step('removed text opened in the panel, its row flashes where it was; Show everything unfolded');
 
   // 9. A change the page cannot find (a script rewrote it): counted, and nothing folds.
   const source = readFileSync(docPath, 'utf8');
@@ -194,7 +247,7 @@ try {
   if (await page.evaluate(() => document.querySelector('annotate-root').dataset.changes) !== 'none') {
     fail('after Mark as read, the comparison state is not "none"');
   }
-  const witness = await page.evaluate(() => document.querySelectorAll('.annotate-new,.annotate-changed,annotate-fold,.annotate-dim').length);
+  const witness = await page.evaluate(() => document.querySelectorAll('.annotate-new,.annotate-changed,annotate-fold').length);
   if (witness || (await barText()).includes('Changes since')) fail('after Mark as read: ' + witness + ' marks');
   step('Mark as read: no mark, no fold, no panel');
 
@@ -226,52 +279,11 @@ try {
     return {
       news: [...document.querySelectorAll('.annotate-new')].map(label),
       changed: [...document.querySelectorAll('.annotate-changed')].map(label),
-      dim: [...document.querySelectorAll('.annotate-dim')].map(label),
-      tags: [...root.querySelectorAll('.chg-tag')].map((t) => t.textContent),
       counts: [...root.querySelectorAll('.chg-counts div')].map((d) => d.textContent).join(','),
       rows: [...root.querySelectorAll('.chg-list li')].map((li) => li.textContent),
       nav: root.querySelector('.chg-nav span').textContent,
       bar: root.querySelector('.counts').textContent,
     };
-  });
-  // No tag covers another tag, nor any text of the page (its own block's first),
-  // and each mark has its own tag, at the top left of its block.
-  const overlaps = () => page.evaluate(() => {
-    const root = document.querySelector('annotate-root').shadowRoot;
-    const tags = [...root.querySelectorAll('.chg-tag')]
-      .filter((t) => t.style.display !== 'none').map((t) => t.getBoundingClientRect());
-    const cross = (a, b) => Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
-      Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1;
-    const found = [];
-    tags.forEach((a, i) => tags.slice(i + 1).forEach((b) => { if (cross(a, b)) found.push('tag on tag'); }));
-    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      if (!n.data.trim() || n.parentElement.closest('style,script')) continue;
-      const range = document.createRange();
-      range.selectNodeContents(n);
-      for (const rect of range.getClientRects()) {
-        if (tags.some((t) => cross(t, rect))) found.push('tag on "' + n.data.trim().slice(0, 24) + '"');
-      }
-    }
-    // Each mark has its tag at the top of its block, above its text: on the
-    // top edge of a padded block (not wholly above it, on the block before, as
-    // in 0.4.0), just above a block without padding; on its left part.
-    for (const block of document.querySelectorAll('.annotate-new, .annotate-changed')) {
-      const b = block.getBoundingClientRect();
-      const s = getComputedStyle(block);
-      const room = parseFloat(s.borderTopWidth) + parseFloat(s.paddingTop);
-      const low = room > 2 ? b.top + 1 : b.top - 2;
-      // A tag may have slid right past the one before it, on the same row, or
-      // gone to the right end of its block when the line above is taken there.
-      const slid = (t) => tags.some((o) => o !== t && Math.abs(o.top - t.top) < 17 &&
-        t.left >= o.right && t.left <= o.right + 6);
-      const atEnd = (t) => t.right <= b.right && t.right >= b.right - 10;
-      const own = tags.some((t) => t.left >= b.left - 1 &&
-        (t.left <= b.left + Math.min(30, b.width / 2) || slid(t) || atEnd(t)) &&
-        t.bottom > low && t.bottom <= b.top + room + 0.5);
-      if (!own) found.push('no tag on the top edge of "' + block.textContent.trim().slice(0, 24) + '"');
-    }
-    return { tags: tags.length, found };
   });
   // The section only, the floating bar hidden: it covers the right column.
   const shoot = async (name, from, to, withBar = false) => {
@@ -291,11 +303,10 @@ try {
   const nest = await drawn();
   const expectNews = ['h2:Planned improvements', 'div:1', 'div:2', 'div:3'];
   if (nest.news.join('|') !== expectNews.join('|')) fail('nested new: ' + JSON.stringify(nest.news));
-  if (nest.changed.length || nest.dim.length) fail('nested changed or dim: ' + JSON.stringify(nest));
+  if (nest.changed.length) fail('nested changed: ' + JSON.stringify(nest));
   if (await page.evaluate(() => document.querySelectorAll('.card h3[class*="annotate-"], .card p[class*="annotate-"]').length)) {
     fail('a block inside a new card is marked');
   }
-  if (nest.tags.join(',') !== 'NEW,NEW,NEW,NEW') fail('nested tags: ' + nest.tags.join(','));
   if (nest.counts !== '4new,0changed,0removed' || nest.rows.length !== 4 || nest.nav !== '– / 4' ||
       !nest.bar.includes(' · 4 changes')) fail('nested panel: ' + JSON.stringify(nest));
   // A card's own text is its number: its row reads by all its text.
@@ -306,8 +317,7 @@ try {
     return s.backgroundColor + ' | ' + (s.boxShadow.includes('inset') ? 'tinted' : 'not tinted');
   });
   if (cardLook !== 'rgb(248, 250, 252) | tinted') fail('a marked card lost its background: ' + cardLook);
-  const nestGeo = await overlaps();
-  if (nestGeo.tags !== 4 || nestGeo.found.length) fail('nested tags placed: ' + JSON.stringify(nestGeo));
+  await noLabel('nested');
   step('nested: 4 marks (h2 + 3 cards), nothing inside a card, panel 4 new');
   await shoot('nested-panel.png', 'main > h2:nth-of-type(2)', '.grid', true);
   await shoot('nested-light.png', 'main > h2:nth-of-type(2)', '.grid');
@@ -315,13 +325,10 @@ try {
   await shoot('nested-dark.png', 'main > h2:nth-of-type(2)', '.grid');
   await page.setViewportSize({ width: 375, height: 800 });
   await frames();
-  const phoneGeo = await overlaps();
-  if (phoneGeo.tags !== 4 || phoneGeo.found.length) fail('nested tags placed at 375 px: ' + JSON.stringify(phoneGeo));
   await shoot('nested-phone-dark.png', 'main > h2:nth-of-type(2)', '.grid');
   await page.emulateMedia({ colorScheme: 'light' });
   await shoot('nested-phone.png', 'main > h2:nth-of-type(2)', '.grid');
   await page.setViewportSize({ width: 1100, height: 800 });
-  step('nested: no tag on a tag or on text, at 1100 and 375 px');
   const stops = [];
   for (let i = 0; i < 5; i++) {
     const at = await nav('▼');
@@ -351,31 +358,23 @@ try {
       (box.matches('.annotate-new,.annotate-changed') ? 1 : 0);
   });
   if (status !== 2) fail('the changed block with a new paragraph carries ' + status + ' marks');
-  // The unchanged paragraph of a changed block is dimmed (the witness that the
-  // dimming ran); the absorbed changed paragraph under a new block is not.
-  if (mix.dim.join('|') !== 'p:The plan holds for the quarter.') fail('mixed dim: ' + JSON.stringify(mix.dim));
   const mixWords = await page.evaluate(() => {
     const h = CSS.highlights && CSS.highlights.get('annotate-added');
     return h ? [...h].map((r) => r.toString()).sort().join(',') : null;
   });
   if (mixWords !== 'beta,final,twelve') fail('mixed highlighted words: ' + mixWords);
-  if (mix.tags.slice().sort().join(',') !== 'CHANGED,CHANGED,CHANGED,NEW,NEW' ||
-      mix.counts !== '2new,3changed,0removed' || mix.rows.length !== 5 || mix.nav !== '– / 5' ||
+  if (mix.counts !== '2new,3changed,0removed' || mix.rows.length !== 5 || mix.nav !== '– / 5' ||
       !mix.bar.includes(' · 5 changes')) fail('mixed panel: ' + JSON.stringify(mix));
-  const mixGeo = await overlaps();
-  if (mixGeo.tags !== 5 || mixGeo.found.length) fail('mixed tags placed: ' + JSON.stringify(mixGeo));
+  await noLabel('mixed');
   step('mixed: CHANGED + NEW, CHANGED + CHANGED, NEW alone over a changed block; words: ' + mixWords);
   await shoot('mixed-light.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
   await page.emulateMedia({ colorScheme: 'dark' });
   await shoot('mixed-dark.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
   await page.setViewportSize({ width: 375, height: 800 });
   await frames();
-  const mixPhone = await overlaps();
-  if (mixPhone.tags !== 5 || mixPhone.found.length) fail('mixed tags placed at 375 px: ' + JSON.stringify(mixPhone));
   await shoot('mixed-phone-dark.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
   await page.emulateMedia({ colorScheme: 'light' });
   await shoot('mixed-phone.png', 'main > h2:nth-of-type(1)', 'main > div:nth-of-type(3)');
-  step('mixed: no tag on a tag or on text, at 1100 and 375 px');
 
   // 13. A whole new list or table is one part; a new item in an old list is its
   // own; a lone new paragraph in a new wrapper keeps the mark; a new section
@@ -391,8 +390,7 @@ try {
   const inner = await page.evaluate(() => document.querySelectorAll(
     '.annotate-new [class*="annotate-"], div.note.annotate-new').length);
   if (inner) fail(inner + ' marks inside a new list, table or card, or on the wrapper');
-  const listGeo = await overlaps();
-  if (listGeo.tags !== 7 || listGeo.found.length) fail('lists tags placed: ' + JSON.stringify(listGeo));
+  await noLabel('lists');
   await shoot('lists-light.png', 'main > h2:nth-of-type(1)', 'main > section');
   await page.emulateMedia({ colorScheme: 'dark' });
   await shoot('lists-dark.png', 'main > h2:nth-of-type(1)', 'main > section');
@@ -413,17 +411,31 @@ try {
   const dotLook = await page.evaluate(() => getComputedStyle(document.querySelector('.dot')).backgroundColor +
     ' | ' + getComputedStyle(document.querySelector('article')).backgroundColor);
   if (dotLook !== 'rgb(14, 116, 144) | rgb(248, 250, 252)') fail('backgrounds under a mark: ' + dotLook);
-  for (const width of [1100, 375]) {
-    await page.setViewportSize({ width, height: 800 });
-    await frames();
-    const geo = await overlaps();
-    if (geo.tags !== 3 || geo.found.length) fail('sibling tags at ' + width + ' px: ' + JSON.stringify(geo));
-  }
+  await noLabel('siblings');
+  await page.setViewportSize({ width: 375, height: 800 });
+  await frames();
   await shoot('siblings-phone.png', 'main > h2:nth-of-type(2)', '.grid');
   await page.setViewportSize({ width: 1100, height: 800 });
   await frames();
   await shoot('siblings-light.png', 'main > h2:nth-of-type(2)', '.grid');
   step('siblings: h2 + one mark per <article> card, none inside, dot and card keep their colour');
+
+  // 15. A change inside a closed zoom: the card that opens it glows, and the
+  // navigator opens it. A section with no block of its own gets no fold bar.
+  await settled(zoomId);
+  const zoomLook = await page.evaluate(() => ({
+    card: document.querySelector('[data-zoom="z-1"]').matches('.annotate-changed'),
+    quiet: document.querySelector('[data-zoom="z-2"]').matches('.annotate-new,.annotate-changed'),
+    open: document.querySelector('#z-1').open,
+    empty: [...document.querySelectorAll('annotate-fold')].filter((f) => f.textContent.includes('0 block')).length,
+  }));
+  if (!zoomLook.card || zoomLook.quiet || zoomLook.open || zoomLook.empty) fail('zoom: ' + JSON.stringify(zoomLook));
+  const zoomNav = await nav('▼');
+  const zoomOpen = await page.evaluate(() => ({ open: document.querySelector('#z-1').open,
+    flashed: document.querySelector('.annotate-flash')?.textContent.includes('rewritten') }));
+  if (zoomNav !== '1 / 1' || !zoomOpen.open || !zoomOpen.flashed) fail('navigator into a zoom: ' + zoomNav + JSON.stringify(zoomOpen));
+  await noLabel('zoom');
+  step('zoom: its card glows, ▼ opens it on the changed block, no empty fold bar');
   if (errors.length) fail('page errors: ' + errors.join(' | '));
 } finally {
   await browser.close();

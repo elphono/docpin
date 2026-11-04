@@ -135,6 +135,26 @@ seul endroit où des notes deviennent envoyées) ; la page lit la copie et le fi
 ne retrouve pas. « Mark as read » (`POST …/baseline`) avance la référence. Une copie impossible à
 écrire **retire** la référence : comparer à une version plus ancienne marquerait comme neuf le déjà-lu.
 
+**Une marque est un halo, rien d'autre** (2026-11-04, sur un vrai document : « c'est horrible […] on a
+juste envie de cliquer sur Mark as read »). Le nouveau luit en vert, le modifié en bleu ciel, doucement
+(`@keyframes annotate-glow` d'`annotate.css`) : plus d'étiquette NEW ou CHANGED, plus de bloc grisé,
+rien de posé sur la page, donc rien qui puisse couvrir un texte. **Un passage retiré n'est plus dans la
+page** : une ligne repliée du panneau (« ▸ 20 removed passages ») ouvre ses textes, chacun mène à
+l'endroit où il était. Le texte d'avant d'un bloc modifié s'ouvre sous sa ligne quand le navigateur s'y
+arrête. **Un changement dans un zoom fermé** (un `<dialog>` de document ELI) fait luire l'élément qui
+l'ouvre (`data-zoom`), et le navigateur ouvre le zoom.
+
+**Une note envoyée est de l'historique** (même jour : « les anciennes notes qui apparaissent toutes en
+haut à gauche »). Mesuré : 11 épingles sur 12 étaient ancrées dans un zoom fermé, sans boîte ;
+`visibleBox` remontait jusqu'à `body`, d'où le tas en haut à gauche. Une épingle ne se pose plus que sur
+son passage, ou sur le `<details>` fermé qui le tient ; sinon elle attend (`null`). Les épingles
+envoyées sont cachées, « Show past notes (N) » les montre (par document, `localStorage`). **Une note
+envoyée dont le passage a disparu ne s'affiche plus nulle part** : le sélecteur ne résout rien, ou le
+texte cité n'est plus dans l'ancre (`anchorOf`, `quoteHolds` : le sélecteur est une position, après une
+correction il peut nommer un autre élément). Elle reste dans le modèle, qu'un `PUT` réécrit en entier.
+**Une note non envoyée, elle, ne disparaît jamais** : ancre perdue, elle reste listée dans la barre,
+parce que personne ne l'a encore lue.
+
 **Le dépôt est aussi une marketplace Claude Code** (2026-10-12, périmètre
 `docs/2026-10-12-perimetre-du-plugin.html`) : un plugin, `docpin` à la racine (`.claude-plugin/`,
 `hooks/hooks.json`, `bin/annotate`, le skill `skills/annotatable-documents/`). Le second, `visual-first`
@@ -237,7 +257,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | un double clic ne livre les notes qu'une fois | `test_a_double_click_hands_the_notes_over_once` |
 | le prompt arrive à `claude` en UN argument, quoi qu'il contienne ; aucun `;` sur la ligne de `wt.exe` | `test_the_prompt_reaches_claude_as_one_argument_in_the_right_folder`, `test_the_tab_command_never_carries_a_semicolon` |
 | `send` n'envoie que les annotations jamais envoyées ; le serveur fait autorité sur `sent_at` | `test_an_open_session_receives_only_the_unsent_notes`, `test_a_stale_browser_copy_cannot_unsend_a_note` |
-| une annotation dont l'ancre ne résout plus n'est jamais perdue (barre « orphelines », prompt « Anchor: lost ») | `test_a_lost_anchor_is_still_sent_with_its_quote`, `test_browser.py` |
+| une annotation non envoyée dont l'ancre ne résout plus n'est jamais perdue (barre « orphelines », prompt « Anchor: lost ») ; une note envoyée sans passage ne s'affiche nulle part et reste dans le modèle ; une épingle envoyée est cachée sauf demande, et cela survit au rechargement ; aucune épingle hors de son passage : zoom fermé, défilée hors du zoom, ou page sous un zoom ouvert = cachée, `<details>` fermé = posée sur lui | `tests/browser/notes_check.mjs`, `test_a_lost_anchor_is_still_sent_with_its_quote`, `test_browser.py` |
 | le parcours ne reprend rien d'antérieur à son premier passage, et ne perd rien démon arrêté | `test_nothing_older_than_the_first_pass_is_taken`, `test_the_daemon_being_down_loses_nothing` |
 | l'auteur d'un document est le DERNIER appel d'outil qui le nomme avant son écriture, sous-agent compris | `test_the_writer_is_the_last_call_naming_the_file_before_it_was_written` |
 | le hook n'enregistre qu'un document d'un dossier suivi, et la règle n'a qu'une copie | `test_register_for_the_hook_takes_only_a_document_of_a_tracked_folder`, `test_every_html_file_is_handed_over_and_annotate_decides` |
@@ -251,7 +271,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | un dépôt ou une session se replie et garde son compte ; un nouveau rendu et un rechargement le gardent replié, le dépliage ne laisse rien dans le stockage ; sans `localStorage`, le repli marche sans erreur | `tests/browser/index_check.mjs` |
 | chaque groupe a son « Cleanup files » ; il ne prend que les documents montrés de ce groupe (sans session, ou de cette session), jamais un autre groupe, jamais un protégé, et n'efface rien au clic ; un fichier manquant part toujours et n'entre pas dans l'index ; le démon n'efface qu'un fichier de l'index, jamais avant 30 jours, jamais un fichier touché (date ou taille) ni ré-enregistré, au plus une fois par heure ; une entrée illisible n'est jamais effacée ; un fichier déjà disparu sort de l'index sans erreur | `tests/test_cleanup.py`, `test_cleanup_files_from_the_page_unmanages_what_it_showed_and_deletes_nothing`, `test_cleanup_files_of_a_session_never_touches_another_session`, `test_cleanup_files_from_the_page_keeps_the_document_a_session_waits_for`, `tests/browser/index_check.mjs`, et les mutations `cleanup-*` de `tools/mutate.py` |
 | la copie de référence est prise à chaque envoi, jamais à côté du document ; un envoi refusé la garde, une copie impossible la retire | `test_a_send_keeps_the_document_as_it_was_as_the_reference`, `test_a_refused_send_keeps_the_previous_reference`, `test_a_reference_that_cannot_be_written_is_removed_and_said`, `test_the_reference_never_lives_next_to_the_document` |
-| référence identique au fichier → rien de dessiné ; un ajout, une modification, un retrait → une marque chacun ; une PARTIE neuve (le plus haut élément qui ne tient que des blocs neufs : liste, tableau, carte) n'en porte qu'une et rien dedans n'en reçoit (classe, étiquette, étape ▲ ▼, ligne du panneau, compteurs), un conteneur dont au moins deux enfants directs sont ou contiennent un titre se scindant en eux (grille de cartes) ; un élément neuf d'une liste ancienne, un bloc sous un bloc MODIFIÉ gardent la leur ; le fond propre d'un bloc marqué reste lisible sous la teinte ; aucune étiquette n'en couvre une autre, et celle d'un bloc est sur son bord haut, au-dessus de son texte (dans son padding s'il en a, au bout du bloc si la ligne du dessus est prise) ; une section qui porte une note non envoyée ne se replie jamais ; rien ne se replie si un changement n'a pas été retrouvé ; le repli ne déplace aucune ancre | `tests/browser/changes_check.mjs` |
+| référence identique au fichier → rien de dessiné ; un ajout, une modification → un halo chacun, une couleur par nature, qui ne déplace rien ; rien d'autre que des épingles sur la page ; un retrait → rien dans la page, une ligne repliée du panneau, qui s'ouvre sur son texte et mène à sa place ; une PARTIE neuve (le plus haut élément qui ne tient que des blocs neufs : liste, tableau, carte) n'en porte qu'un et rien dedans n'en reçoit (classe, étape ▲ ▼, ligne du panneau, compteurs), un conteneur dont au moins deux enfants directs sont ou contiennent un titre se scindant en eux (grille de cartes) ; un élément neuf d'une liste ancienne, un bloc sous un bloc MODIFIÉ gardent le leur ; le fond propre d'un bloc marqué reste lisible sous le halo ; un changement dans un zoom fermé fait luire ce qui l'ouvre, et ▼ l'ouvre ; une section qui porte une note non envoyée ne se replie jamais, une section sans bloc n'a pas de barre ; rien ne se replie si un changement n'a pas été retrouvé ; le repli ne déplace aucune ancre | `tests/browser/changes_check.mjs` |
 | hors WSL, le navigateur et l'onglet passent par les outils de la plateforme (`xdg-open`, `open`, terminal natif, ou le `terminal` de `config.toml`), jamais par ceux de Windows ; sans workspace, les `docs/` du home sont des documents, mais le home n'est jamais parcouru | `tests/test_platforms.py` |
 | aucune note n'est postée à une session ouverte sur un protocole non vérifié : elles restent à envoyer, avec la raison, et jamais d'onglet ; « Resend » ne remet que le dernier lot | `test_a_session_on_an_unchecked_protocol_gets_nothing_and_the_notes_stay`, `test_resend_puts_the_last_batch_back_and_posts_it_again` |
 | le plugin n'exécute jamais le code de son dossier de version ; une copie survit à la suppression de ce dossier ; trois copies gardées, jamais celle en service ; une nouvelle version rend `stale` le démon d'une copie plus ancienne ; le raccourci Démarrage de la pastille nomme un fichier simple que chaque installation rafraîchit, jamais une copie datée ni `current` | `test_the_launcher_runs_a_copy_of_the_code_outside_the_plugin_folder`, `test_the_tray_shortcut_names_a_plain_file_that_every_install_refreshes`, `test_a_copy_survives_the_plugin_folder_being_deleted`, `test_a_new_version_gets_a_copy_of_its_own_and_three_are_kept`, `test_a_daemon_running_a_copy_turns_stale_when_a_new_version_is_installed` |
@@ -334,8 +354,8 @@ périmée depuis la 0.4.0 arrêtait la campagne après une heure, le 2026-10-14)
   `test_a_daemon_says_when_its_code_changed_on_disk_since_it_started`, `index_check.mjs`.
 - **La page ne reçoit que des classes et `<annotate-fold>`, jamais un `div` ou un `p`** : les épingles
   s'ancrent en `nth-of-type`, qui ne compte que les frères de même balise. Un `p` inséré pour replier
-  décalait l'ancre de la note suivante (mutation `fold-shifts-anchors`). Étiquettes, pastilles
-  « removed » et ancien texte vivent dans la couche de l'overlay.
+  décalait l'ancre de la note suivante (mutation `fold-shifts-anchors`). Ce qui n'est pas une
+  classe vit dans le panneau de l'overlay.
 - **La barre s'affiche avant la fin de la comparaison** : son texte ne dit rien de l'état des
   changements. Le test du témoin lisait la page trop tôt et passait sans rien voir (mutation
   `witness-draws` survivante, 2026-10-12) ; l'overlay publie désormais `data-changes` sur
@@ -343,8 +363,17 @@ périmée depuis la 0.4.0 arrêtait la campagne après une heure, le 2026-10-14)
 - **Une partie neuve ne porte qu'une marque** (2026-10-14, « c'est moche et trop chargé » : treize NEW sur une
   section de trois cartes, l'un sur l'autre). Un bloc neuf monte au plus haut élément qui ne tient que des blocs
   neufs (liste, tableau, `<article>`) ; **un conteneur se scinde en ses enfants directs quand au moins deux d'entre
-  eux sont ou contiennent un titre `h1`–`h6`** (grille de cartes, page). La teinte est une ombre intérieure : le
-  fond d'un bloc marqué (une pastille numérotée) reste dessous, lisible.
+  eux sont ou contiennent un titre `h1`–`h6`** (grille de cartes, page). Le halo est une ombre : le fond d'un bloc
+  marqué (une pastille numérotée) reste dessous, lisible.
+- **Un `box-shadow … !important` fige une animation** : dans la cascade, une déclaration `!important`
+  passe avant les animations. Le halo n'en porte donc pas (une animation l'emporte déjà sur une ombre
+  normale du document), sauf sous `prefers-reduced-motion`, où il ne s'anime pas.
+- **Le contenu d'un `<details>` fermé a une boîte** dans Chromium (`content-visibility: hidden`) :
+  `getBoundingClientRect` y rend une position, sous la ligne de résumé. Il faut donc chercher le
+  `<details>` fermé **avant** de mesurer l'ancre, pas seulement quand elle mesure zéro.
+- **L'overlay passe au-dessus de tout zoom** (`z-index` maximal, zooms ouverts par `show()`) : une
+  épingle de la page sous un zoom ouvert flotterait sur son texte, et une épingle défilée hors de la
+  boîte du zoom déborderait sur le fond. `behindZoom` et `scrolledOut` les cachent.
 - **Le `bin/` d'un plugin est sur le PATH de l'outil Bash, pas sur celui d'un hook d'un autre plugin**
   (mesuré le 2026-10-12, sessions de test dans un home vide) : le contrôle de visual-first (passé dans eli le
   2026-10-23) ne trouvait pas `annotate` et retombait sans bruit sur la règle `docs/`. Il passe désormais par la copie stable

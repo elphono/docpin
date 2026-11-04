@@ -7,7 +7,12 @@
  * The model is `annotations`: ALWAYS the full list, orphans included. Every
  * change PUTs that whole list, so an annotation whose anchor no longer
  * resolves must stay in the model, or the next save would delete it in
- * silence. Orphans are listed in the bar with their quote instead of a pin.
+ * silence. An orphan not sent yet is listed in the bar with its quote instead
+ * of a pin; an orphan already sent has done its work and shows nowhere.
+ *
+ * A sent note is history: its pin stays hidden until the reader asks for the
+ * past notes (the bar), and a pin only ever sits on its own passage. Whatever
+ * holds that passage closed (a zoom, a folded section), the pin waits with it.
  *
  * The UI lives in a shadow root: the documents style `button`, `textarea`
  * and `div` freely, and none of it must reach the bar or the bubble.
@@ -49,6 +54,9 @@
   let changed = false;         // the file on disk is newer than the page
   let saving = Promise.resolve();
   let changeView = null;       // what changed since the last send (changes.js)
+  const PAST_KEY = 'docpin.pastNotes:' + DOC;
+  let showPast = false;        // the sent notes' pins, off unless asked for
+  try { showPast = localStorage.getItem(PAST_KEY) === '1'; } catch (err) { showPast = false; }
 
   // -- DOM scaffolding -----------------------------------------------------
   const host = document.createElement('annotate-root');
@@ -180,14 +188,65 @@
     }
   }
 
-  // The nearest box that is actually rendered (a closed <details> hides
-  // its content: the pin goes on the visible ancestor).
-  function visibleBox(node) {
-    for (let n = node; n && n !== document.documentElement; n = n.parentElement) {
-      const r = n.getBoundingClientRect();
-      if (r.width > 0 || r.height > 0) return r;
+  // A sent note's passage is gone when its text left the anchor: the selector
+  // is a position, and after an edit it can name another element. A quote made
+  // from a selection may run past the anchor: it is looked for in the page.
+  const flat = (s) => String(s || '').replace(/\s+/g, '').toLowerCase();
+  function quoteHolds(item, target) {
+    const quote = flat(item.quote);
+    if (!quote) return true;
+    let node = target;
+    if (target.querySelector('annotate-fold')) {
+      node = target.cloneNode(true);
+      node.querySelectorAll('annotate-fold').forEach((f) => f.remove());
     }
-    return document.body.getBoundingClientRect();
+    if (flat(node.textContent).includes(quote) || flat(node.innerText).includes(quote)) return true;
+    return !item.at && flat(document.body.textContent).includes(quote);
+  }
+
+  // The element a note stands on, or null: its selector resolves nowhere, or
+  // it was sent and its passage is gone.
+  function anchorOf(item) {
+    const target = resolve(item.selector);
+    return target && item.sent_at && !quoteHolds(item, target) ? null : target;
+  }
+
+  // The box a pin sits on: the anchor's, or the closed <details> that holds it
+  // (its content still has a box of its own, measured, below the summary line).
+  // Anything else that hides the anchor (a closed zoom, a hidden tab) has no
+  // place to offer: the box of a mere ancestor would put the pin far from its
+  // passage, at the top of the page for a zoom. Null then.
+  function visibleBox(node) {
+    const closed = node.closest('details:not([open])');
+    const holder = closed && !node.closest('summary') ? closed : node;
+    const box = holder.getBoundingClientRect();
+    return box.width > 0 || box.height > 0 ? box : null;
+  }
+
+  // Inside a zoom, a passage scrolled out of the zoom's box: its pin must not
+  // float over the page around it. (In the page itself, the pin scrolls away
+  // with its passage.)
+  function scrolledOut(target, y) {
+    const dialog = target.closest('dialog');
+    if (!dialog) return false;
+    for (let up = target.parentElement; up; up = up.parentElement) {
+      if (getComputedStyle(up).overflowY !== 'visible') {
+        const clip = up.getBoundingClientRect();
+        if (y < clip.top || y > clip.bottom) return true;
+      }
+      if (up === dialog) break;
+    }
+    return false;
+  }
+
+  // A passage of the page under an open zoom: the overlay is above every zoom,
+  // its pin would float over the zoom's text.
+  function behindZoom(target, x, y) {
+    return [...document.querySelectorAll('dialog[open]')].some((dialog) => {
+      if (dialog.contains(target)) return false;
+      const r = dialog.getBoundingClientRect();
+      return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+    });
   }
 
   // -- persistence -----------------------------------------------------------
@@ -244,8 +303,8 @@
       return;
     }
     changeView = C.apply(D.compare(data.reference, data.current, document), {
-      layer, at: data.at, flash,
-      notes: annotations.map((a) => ({ target: resolve(a.selector), sent: Boolean(a.sent_at) })),
+      at: data.at, flash,
+      notes: annotations.map((a) => ({ target: anchorOf(a), sent: Boolean(a.sent_at) })),
       changed: () => render(),
       markRead,
     });
@@ -358,18 +417,29 @@
     const origin = layer.getBoundingClientRect();
     const orphans = [];
     const placed = new Set();
+    let past = 0;
     for (const item of annotations) {
-      const target = resolve(item.selector);
-      if (!target) { orphans.push(item); continue; }
+      const target = anchorOf(item);
+      if (!target) {
+        if (!item.sent_at) orphans.push(item);
+        continue;
+      }
+      if (item.sent_at) past += 1;
       const box = visibleBox(target);
-      const dx = Math.min(Math.max(item.offset_x || 0, 0), Math.max(box.width, 0));
-      const dy = Math.min(Math.max(item.offset_y || 0, 0), Math.max(box.height, 0));
       const pin = pinFor(item);
       pin.className = 'pin' + (item.sent_at ? ' sent' : '');
       pin.textContent = (item.sent_at ? '✓' : '') + String(item.number);
-      pin.style.display = changeView && changeView.hidden(target) ? 'none' : '';
-      pin.style.left = (box.left - origin.left + dx) + 'px';
-      pin.style.top = (box.top - origin.top + dy) + 'px';
+      let wanted = box && (showPast || !item.sent_at) && !(changeView && changeView.hidden(target));
+      if (box) {
+        const dx = Math.min(Math.max(item.offset_x || 0, 0), Math.max(box.width, 0));
+        const dy = Math.min(Math.max(item.offset_y || 0, 0), Math.max(box.height, 0));
+        pin.style.left = (box.left - origin.left + dx) + 'px';
+        pin.style.top = (box.top - origin.top + dy) + 'px';
+        if (wanted && (scrolledOut(target, box.top + dy) || behindZoom(target, box.left + dx, box.top + dy))) {
+          wanted = false;
+        }
+      }
+      pin.style.display = wanted ? '' : 'none';
       pin.title = item.note;
       pin.target = target;
       placed.add(item.id);
@@ -381,11 +451,13 @@
         pins.delete(id);
       }
     }
-    if (changeView) changeView.layout(origin);
-    renderBar(orphans);
+    // The bar is rebuilt at each render, every few seconds: its scroll stays.
+    const kept = bar.scrollTop;
+    renderBar(orphans, past);
+    bar.scrollTop = kept;
   }
 
-  function renderBar(orphans) {
+  function renderBar(orphans, past) {
     bar.textContent = '';
     bar.classList.toggle('collapsed', collapsed);
     const pending = annotations.filter((a) => !a.sent_at).length;
@@ -452,6 +524,16 @@
       bar.append(list);
     }
     if (message) bar.append(make('div', 'message', message));
+    if (past) {
+      const toggle = make('button', 'past-toggle',
+        (showPast ? 'Hide' : 'Show') + ' past notes (' + past + ')');
+      toggle.addEventListener('click', () => {
+        showPast = !showPast;
+        try { localStorage.setItem(PAST_KEY, showPast ? '1' : '0'); } catch (err) { /* this page only */ }
+        render();
+      });
+      bar.append(toggle);
+    }
     bar.append(make('div', 'hint', 'Alt+click on the document to annotate'));
   }
 
@@ -522,6 +604,16 @@
   window.addEventListener('resize', schedule);
   window.addEventListener('load', schedule);
   if (window.ResizeObserver) new ResizeObserver(schedule).observe(document.body);
+  // A zoom or a <details> that opens: the pins inside it have a place now, and
+  // they follow what scrolls inside it (the page's own scroll moves them anyway).
+  new MutationObserver(() => {
+    schedule();
+    // A zoom opens with an animation of its box: the place is right once it ends.
+    Promise.allSettled(document.getAnimations()
+      .filter((a) => a.effect && a.effect.getTiming().iterations !== Infinity)
+      .map((a) => a.finished)).then(schedule);
+  }).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['open'] });
+  document.addEventListener('scroll', (e) => { if (e.target !== document) schedule(); }, true);
 
   async function poll() {
     await refreshEntry();

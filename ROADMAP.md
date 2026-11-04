@@ -40,13 +40,14 @@ items marked **(proposal)** are ideas, not commitments.
 - Tracked folders chosen from the home page (any folder under `~`, every `.html` under it), and a
   rescan that catches up the files of the last N days without reviving unmanaged documents.
 - Annotation layer injected by the daemon: Alt+click pins a numbered note, anchored by CSS selector +
-  quote + offset, so it survives corrections. An “orphans” bar keeps notes whose anchor disappeared.
+  quote + offset, so it survives corrections. An “orphans” bar keeps unsent notes whose anchor disappeared; sent notes stay hidden until asked for, and leave with their passage.
 - Three delivery routes: the session that waits (`annotate wait`), the open session's inbox, a
   Windows Terminal tab that resumes the session. Never a background session.
 - Home page and Windows tray icon, with per-document and per-daemon controls.
 - What changed since the last send: every send keeps a copy of the document (outside the
-  repository); the page compares it block by block with the file, marks what is new, changed or
-  removed, folds the sections already read, and offers a navigator and **Mark as read**.
+  repository); the page compares it block by block with the file, makes what is new or changed glow,
+  keeps removed passages closed in its panel, folds the sections already read, and offers a navigator
+  and **Mark as read**.
 - Attach a document to any resumable conversation of the machine from the home page (open sessions
   first, filter as you type), or detach it; `annotate sessions` / `attach` / `detach` do the same.
 - Local-only HTTP API, hardened against pages that merely target `localhost`.
