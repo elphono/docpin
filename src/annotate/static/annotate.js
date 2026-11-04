@@ -211,25 +211,30 @@
     return target && item.sent_at && !quoteHolds(item, target) ? null : target;
   }
 
+  // What a pin stands on: its anchor, or the closed <details> that holds it.
+  function holderOf(node) {
+    const closed = node.closest('details:not([open])');
+    return closed && !node.closest('summary') ? closed : node;
+  }
+
   // The box a pin sits on: the anchor's, or the closed <details> that holds it
   // (its content still has a box of its own, measured, below the summary line).
   // Anything else that hides the anchor (a closed zoom, a hidden tab) has no
   // place to offer: the box of a mere ancestor would put the pin far from its
   // passage, at the top of the page for a zoom. Null then.
   function visibleBox(node) {
-    const closed = node.closest('details:not([open])');
-    const holder = closed && !node.closest('summary') ? closed : node;
-    const box = holder.getBoundingClientRect();
+    const box = holderOf(node).getBoundingClientRect();
     return box.width > 0 || box.height > 0 ? box : null;
   }
 
   // Inside a zoom, a passage scrolled out of the zoom's box: its pin must not
   // float over the page around it. (In the page itself, the pin scrolls away
-  // with its passage.)
+  // with its passage.) Only what surrounds the holder clips: inside a closed
+  // <details>, a table that scrolls on its own has a box below the summary line.
   function scrolledOut(target, y) {
     const dialog = target.closest('dialog');
     if (!dialog) return false;
-    for (let up = target.parentElement; up; up = up.parentElement) {
+    for (let up = holderOf(target).parentElement; up; up = up.parentElement) {
       if (getComputedStyle(up).overflowY !== 'visible') {
         const clip = up.getBoundingClientRect();
         if (y < clip.top || y > clip.bottom) return true;

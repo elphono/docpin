@@ -370,7 +370,9 @@ périmée depuis la 0.4.0 arrêtait la campagne après une heure, le 2026-10-14)
   normale du document), sauf sous `prefers-reduced-motion`, où il ne s'anime pas.
 - **Le contenu d'un `<details>` fermé a une boîte** dans Chromium (`content-visibility: hidden`) :
   `getBoundingClientRect` y rend une position, sous la ligne de résumé. Il faut donc chercher le
-  `<details>` fermé **avant** de mesurer l'ancre, pas seulement quand elle mesure zéro.
+  `<details>` fermé **avant** de mesurer l'ancre, pas seulement quand elle mesure zéro. Le contrôle
+  de défilement part du même `<details>` : un tableau à défilement propre, dedans, a une boîte plus bas
+  que le résumé, et cachait l'épingle (2026-11-04, 5 notes sur 6 d'un vrai document).
 - **L'overlay passe au-dessus de tout zoom** (`z-index` maximal, zooms ouverts par `show()`) : une
   épingle de la page sous un zoom ouvert flotterait sur son texte, et une épingle défilée hors de la
   boîte du zoom déborderait sur le fond. `behindZoom` et `scrolledOut` les cachent.

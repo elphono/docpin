@@ -6,7 +6,8 @@
 // The Python side (tests/test_browser.py) seeded the notes: 1 to 4 sent (1 on
 // a kept passage, 2 on a rewritten one, 3 on a deleted one, 4 in a closed zoom),
 // 5 to 10 unsent (5 on the rewritten one, 6 and 9 in the zoom, 7 in a closed
-// <details>, 8 on a deleted passage, 10 in a hidden tab). It checks afterwards
+// <details>, 8 on a deleted passage, 10 in a hidden tab, 11 in a scrolling table
+// of a closed <details> of the zoom). It checks afterwards
 // that all survive.
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -41,17 +42,19 @@ try {
       .map((p) => Number(p.textContent.replace('✓', ''))).sort((a, b) => a - b).join(',') === w,
     want, { timeout: 1500 }).catch(async () => fail(why + ': pins ' + await shown() + ', expected ' + want));
   };
-  // A pin stands on its anchor's box, never elsewhere.
+  // A pin stands on its anchor's box, never elsewhere. It gets there on the
+  // render that follows a change, hence the bounded wait.
   const onItsPassage = async (number, selector) => {
-    const gap = await page.evaluate(([n, sel]) => {
+    const gapOf = ([n, sel]) => {
       const pin = [...document.querySelector('annotate-root').shadowRoot.querySelectorAll('.pin')]
         .find((p) => p.textContent.replace('✓', '') === String(n)).getBoundingClientRect();
       const box = document.querySelector(sel).getBoundingClientRect();
       const x = pin.left + pin.width / 2;
       const y = pin.top + pin.height / 2;
       return Math.max(box.left - x, x - box.right, box.top - y, y - box.bottom, 0);
-    }, [number, selector]);
-    if (gap > 1) fail(`pin ${number} is ${gap}px away from ${selector}`);
+    };
+    await page.waitForFunction(`(${gapOf})(${JSON.stringify([number, selector])}) <= 1`, null, { timeout: 1500 })
+      .catch(async () => fail(`pin ${number} is ${await page.evaluate(gapOf, [number, selector])}px away from ${selector}`));
   };
   const toggle = (text) => page.evaluate(() => {
     const t = document.querySelector('annotate-root').shadowRoot.querySelector('.past-toggle');
@@ -96,9 +99,16 @@ try {
   // the page under it hide; the one scrolled out of the box stays hidden until
   // scrolled to, and then follows.
   await page.locator('#open').click();
-  await expectPins('4,6', 'zoom open');
+  await expectPins('4,6,11', 'zoom open');
   await onItsPassage(4, '#in-zoom');
   await onItsPassage(6, '#in-zoom');
+  // A closed section of the zoom holds the pin of a table that scrolls on its
+  // own: that table's box lies below the section, and must not clip the pin.
+  await onItsPassage(11, '#zoom-fold');
+  await page.evaluate(() => { document.querySelector('#zoom-fold').open = true; });
+  await expectPins('4,6,11', 'section of the zoom opened');
+  await onItsPassage(11, '#in-zoom-fold');
+  await page.evaluate(() => { document.querySelector('#zoom-fold').open = false; });
   await page.screenshot({ path: join(outDir, 'notes-zoom.png') });
   await page.evaluate(() => { document.querySelector('.box').scrollTop = 100000; });
   await expectPins('9', 'zoom scrolled to its end');
@@ -124,7 +134,7 @@ try {
   // 7. Hide again: back to the unsent ones, and three rounds hold.
   for (let i = 0; i < 3; i++) {
     await clickToggle();
-    await expectPins(i % 2 ? '1,5,7,11' : '5,7,11', 'toggle round ' + i);
+    await expectPins(i % 2 ? '1,5,7,12' : '5,7,12', 'toggle round ' + i);
   }
   step('Hide / Show / Hide, three rounds');
 
@@ -134,9 +144,9 @@ try {
     Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } });
   });
   await load();
-  await expectPins('5,7,11', 'no local storage');
+  await expectPins('5,7,12', 'no local storage');
   await clickToggle();
-  await expectPins('1,5,7,11', 'no local storage, shown');
+  await expectPins('1,5,7,12', 'no local storage, shown');
   step('without local storage: hidden by default, the toggle still works');
 
   if (errors.length) fail('page errors: ' + errors.join(' | '));

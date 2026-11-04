@@ -322,7 +322,10 @@ NOTES_DOC = ("<main><p id='kept'>This passage is still here.</p>"
              "</main><dialog id='z-1' style='position:fixed;inset:0;width:100%;height:100%;"
              "max-width:none;max-height:none;margin:0;padding:16px;border:0'>"
              "<div class='box' style='max-height:300px;overflow:auto'>"
-             "<p id='in-zoom'>A cell in the zoom.</p><div style='height:900px'></div>"
+             "<p id='in-zoom'>A cell in the zoom.</p>"
+             "<details id='zoom-fold'><summary>Under the hood</summary><div style='height:200px'></div>"
+             "<div style='overflow-x:auto'><table><tr><td id='in-zoom-fold'>A wide table.</td></tr></table></div>"
+             "</details><div style='height:900px'></div>"
              "<p id='far'>Far down the zoom.</p></div>"
              "<button id='close'>Close</button></dialog>"
              "<script>document.getElementById('open').addEventListener('click', "
@@ -360,6 +363,7 @@ def test_past_notes_in_a_real_browser(tmp_path, make_doc):
         note(8, "#deleted", "Another passage that left."),      # unsent: listed, never lost
         note(9, "#far", "Far down the zoom."),                  # unsent, scrolled out in the zoom
         note(10, "#in-tab", "In a hidden tab."),                # unsent, hidden by the document
+        note(11, "#in-zoom-fold", "A wide table."),             # unsent, closed <details> in the zoom
     ])
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     out = Path(os.environ.get("ANNOTATE_BROWSER_OUT", tmp_path))
@@ -375,7 +379,7 @@ def test_past_notes_in_a_real_browser(tmp_path, make_doc):
     assert done.returncode == 0, done.stdout + done.stderr
     # Hidden is not deleted: a save from the page (step 6) kept every note.
     saved = {a["number"]: a for a in registry.list_annotations(doc_id)}
-    assert sorted(saved) == list(range(1, 12))
+    assert sorted(saved) == list(range(1, 13))
     assert saved[2]["note"] == "note 2" and saved[3]["note"] == "note 3"
 
 
