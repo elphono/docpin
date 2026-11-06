@@ -29,7 +29,7 @@ try {
     await page.waitForFunction(() => {
       const host = document.querySelector('annotate-root');
       return host && host.dataset.changes && host.dataset.changes !== 'pending' &&
-        host.shadowRoot.querySelector('.bar').textContent.includes('to send');
+        host.shadowRoot.querySelector('.bar .bar-top');
     });
   };
   // The numbers of the pins on screen, sorted.
@@ -64,6 +64,8 @@ try {
     document.querySelector('annotate-root').shadowRoot.querySelector('.past-toggle').click());
 
   await load();
+  // The panel starts folded (overlay_check.mjs); open, it stays open.
+  await page.locator('annotate-root .pill-open').click();
 
   // 1. By default: the unsent notes only, each on its passage. Those in the
   // closed zoom and in the hidden tab have none (the top of the page is where
@@ -145,6 +147,7 @@ try {
   });
   await load();
   await expectPins('5,7,12', 'no local storage');
+  await page.locator('annotate-root .pill-open').click();   // nothing remembered: folded
   await clickToggle();
   await expectPins('1,5,7,12', 'no local storage, shown');
   step('without local storage: hidden by default, the toggle still works');

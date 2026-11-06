@@ -259,6 +259,7 @@
       hidden: (node) => Boolean(node && node.closest && node.closest('.annotate-folded')),
       reveal,
       showAll() { sections.forEach(unfold); },
+      at: () => index,
       next() { if (drawn.length) go((index + 1) % drawn.length); },
       prev() { if (drawn.length) go((index - 1 + drawn.length) % drawn.length); },
       panel() {

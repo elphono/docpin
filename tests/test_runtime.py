@@ -20,7 +20,6 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 import types
 from pathlib import Path
 
@@ -183,12 +182,21 @@ def test_a_lower_version_runs_its_own_copy_and_leaves_current_alone(tmp_path):
     assert tray_of("v060")
 
 
+def dated(copy: Path, rank: int) -> Path:
+    """Give a copy a folder date of its own, `rank` seconds into a fixed day.
+    Sleeping between copies does not order them: the wall clock can step back
+    during a run (measured 2026-11-06 under WSL, one run in sixty: a copy made
+    later was dated 0.4 s before an earlier one, another 9.5 s after)."""
+    stamp = 1_700_000_000 + rank
+    os.utime(copy, (stamp, stamp))
+    return copy
+
+
 def test_the_copy_current_names_is_never_pruned(tmp_path):
-    high = runtime.install(release(tmp_path, "v060", "0.6.0"))
+    high = dated(runtime.install(release(tmp_path, "v060", "0.6.0")), 0)
     lows = []
     for round_ in range(4):                      # four lower copies, all newer on disk
-        time.sleep(0.02)
-        lows.append(runtime.install(release(tmp_path, f"low{round_}", "0.5.2")))
+        lows.append(dated(runtime.install(release(tmp_path, f"low{round_}", "0.5.2")), 1 + round_))
     assert runtime.named() == high.name and (high / "annotate" / "cli.py").is_file()
     assert not lows[0].exists()                  # the pruning did happen, on the others
     assert what_the_unit_runs() == "0.6.0"
@@ -201,9 +209,8 @@ def test_the_copy_current_names_is_kept_even_ranked_below_copies_of_its_version(
     (mutation `prune-takes-the-named-copy` survived the test above once the
     ranking by version made it protect the named copy by itself)."""
     clones = [release(tmp_path, name, "0.6.0") for name in ("a", "b", "c")]
-    for package in clones:
-        runtime.install(package)
-        time.sleep(0.02)                         # distinct folder dates
+    for rank, package in enumerate(clones):
+        dated(runtime.install(package), rank)    # distinct folder dates
     named = runtime.install(clones[0])           # back to the oldest on disk
     assert runtime.named() == named.name
     runtime.install(release(tmp_path, "low", "0.5.2"))
@@ -214,14 +221,16 @@ def test_the_copy_current_names_is_kept_even_ranked_below_copies_of_its_version(
 def test_the_copies_older_launchers_leave_go_before_the_one_a_daemon_still_runs(tmp_path):
     """Each older launcher makes its copy, then the folder refuses it: those
     copies are the newest on disk, and nothing will ever run them."""
-    running = runtime.install(release(tmp_path, "v051", "0.5.1"))  # until the restart
+    running = dated(runtime.install(release(tmp_path, "v051", "0.5.1")), 0)  # until the restart
     new = release(tmp_path, "v052", "0.5.2")
-    runtime.install(new)
-    for legacy, (version, _) in sorted(LEGACY_RUNTIMES.items()):
-        time.sleep(0.02)
+    dated(runtime.install(new), 1)
+    for rank, (legacy, (version, _)) in enumerate(sorted(LEGACY_RUNTIMES.items()), start=2):
+        before = set(copies())
         old = legacy_runtime(legacy)
         with pytest.raises(old.LaunchError):
             old.install(release(tmp_path, f"old-{version}", version, legacy))
+        for left in set(copies()) - before:
+            dated(left, rank)
     assert len(copies()) == 5                    # 0.5.1, 0.5.2 and three left behind
     runtime.install(new)                         # the next launch of 0.5.2 prunes
     assert (running / "annotate" / "cli.py").is_file()

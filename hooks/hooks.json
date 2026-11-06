@@ -1,6 +1,14 @@
 {
   "description": "Register the HTML documents a session writes, so that the reader's notes come back to that session",
   "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          {"type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/annotate refresh", "timeout": 30}
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write|Edit",

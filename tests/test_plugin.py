@@ -56,6 +56,18 @@ def test_the_plugin_hook_runs_the_registering_script_of_the_plugin():
         assert os.access(script, os.X_OK), script
 
 
+def test_each_session_start_installs_this_version_and_refreshes_the_daemon():
+    # 2026-11-04: after `claude plugin update`, the daemon kept the old code
+    # until a session happened to run a docpin command; "Restart daemon"
+    # relaunched the old copy. The launcher installs its copy before any command.
+    hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+    [entry] = hooks["hooks"]["SessionStart"]
+    assert set(entry["matcher"].split("|")) == {"startup", "resume"}
+    [hook] = entry["hooks"]
+    assert hook["command"] == '"${CLAUDE_PLUGIN_ROOT}"/bin/annotate refresh'
+    assert hook["timeout"] >= 10
+
+
 # ------------------------------------------------------------- the launcher
 
 def launch(*args: str, launcher: Path = LAUNCHER, env: dict[str, str] | None = None

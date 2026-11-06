@@ -59,7 +59,8 @@ That is exactly the author's setup, minus his own preferences (he writes in Fren
 
 To try it, ask that new session for something to review, for instance *"write up how our login
 works, as a document I can comment on"*. It answers with a link: open it, Alt+click a sentence, write
-a note, click **Send to session**. The session receives the note and fixes the document.
+a note, then click the pill at the bottom right of the page and **Send to session**. The session
+receives the note and fixes the document.
 
 The first time, Claude Code asks your permission to run `annotate wait`: that is the session waiting
 for your notes. Allow it.
@@ -71,6 +72,10 @@ for your notes. Allow it.
 | the two plugins | in Claude Code's own plugin folder, like any plugin |
 | your notes, and a copy of docpin's code | `~/.local/share/annotate` |
 | docpin's daemon: the small background program that serves the pages and carries your notes | **included in the docpin plugin**, nothing else to install; it only answers your own machine (`http://127.0.0.1:8765`) |
+
+**On the page**, docpin's panel is folded into a pill at the bottom right: it says what asks for
+you (notes to send, a note whose passage is gone, what changed, a document rewritten on disk) and
+walks the changes with ▲ ▼. A click opens it; it stays as you left it, on every document.
 
 Nothing is written into your projects, nothing is installed system-wide, nothing goes to the network.
 
@@ -143,8 +148,9 @@ a script or a helper agent wrote them, within 30 seconds.
 
 In a terminal:
 
-- Update: `claude plugin update docpin@docpin`, then start a new session.
-  If the home page says **Restart daemon**, click it.
+- Update: `claude plugin update docpin@docpin`, then start a new session. Its start installs the
+  new version and restarts the daemon if it still runs the old one; a session waiting for notes
+  reconnects on its own.
 - Uninstall: `claude plugin uninstall docpin@docpin`. Your notes stay in
   `~/.local/share/annotate`; delete that folder to remove them too.
 

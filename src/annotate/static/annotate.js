@@ -49,7 +49,16 @@
   let message = '';
   let editing = null;          // { item, isNew }
   let suppressClick = false;
-  let collapsed = false;
+  // The panel starts folded into a pill: open, it covered the right of the page
+  // and hid a pin (2026-11-04). The reader's choice holds for every document.
+  const PANEL_KEY = 'docpin.panel';
+  let collapsed = true;
+  try { collapsed = localStorage.getItem(PANEL_KEY) !== 'open'; } catch (err) { collapsed = true; }
+  const setCollapsed = (value) => {
+    collapsed = value;
+    try { localStorage.setItem(PANEL_KEY, value ? 'folded' : 'open'); } catch (err) { /* this page only */ }
+    render();
+  };
   let loadedMtime = null;      // the file as this page shows it
   let changed = false;         // the file on disk is newer than the page
   let saving = Promise.resolve();
@@ -468,14 +477,18 @@
     const pending = annotations.filter((a) => !a.sent_at).length;
     const sent = annotations.length - pending;
     const top = make('div', 'bar-top');
+    bar.append(top);
+    if (collapsed) {
+      renderPill(top, pending, sent, orphans);
+      return;
+    }
     const counts = make('span', 'counts', pending + ' to send · ' + sent + ' sent' +
       (changeView ? ' · ' + changeView.total + ' changes' : ''));
-    const toggle = make('button', 'toggle', collapsed ? '▴' : '▾');
-    toggle.title = collapsed ? 'Expand' : 'Collapse';
-    toggle.addEventListener('click', () => { collapsed = !collapsed; render(); });
+    const toggle = make('button', 'toggle', '▾');
+    toggle.title = 'Fold the panel';
+    toggle.setAttribute('aria-expanded', 'true');
+    toggle.addEventListener('click', () => setCollapsed(true));
     top.append(counts, toggle);
-    bar.append(top);
-    if (collapsed) return;
     if (changeView) bar.append(changeView.panel());
 
     const busy = entry && entry.status === 'delivered';
@@ -540,6 +553,49 @@
       bar.append(toggle);
     }
     bar.append(make('div', 'hint', 'Alt+click on the document to annotate'));
+  }
+
+  // The folded panel: what asks for the reader, and nothing else. Each part
+  // shows only when it says something: notes to send, notes whose passage is
+  // gone, what changed (with the navigator, so the halos can be walked without
+  // opening anything), a document rewritten on disk. With none of them, the
+  // gesture to start with.
+  function renderPill(top, pending, sent, orphans) {
+    const open = make('button', 'pill-open');
+    open.title = 'Open the panel';
+    open.setAttribute('aria-expanded', 'false');
+    const lost = orphans.filter((item) => !item.sent_at).length;
+    const parts = [];
+    if (pending) parts.push(make('span', 'seg send', pending + ' to send'));
+    if (lost) parts.push(make('span', 'seg lost', lost + ' lost'));
+    if (changeView && changeView.total) parts.push(make('span', 'seg changes', changeView.total + ' changes'));
+    if (!parts.length) {
+      parts.push(make('span', 'seg', sent ? sent + ' sent' : 'Alt+click to annotate'));
+    }
+    open.append(...parts);
+    open.addEventListener('click', () => setCollapsed(false));
+    top.append(open);
+    if (changeView && changeView.items.length) {
+      const nav = make('span', 'pill-walk');
+      const up = make('button', 'pill-nav', '▲');
+      up.title = 'Previous change';
+      up.addEventListener('click', () => changeView.prev());
+      const down = make('button', 'pill-nav', '▼');
+      down.title = 'Next change';
+      down.addEventListener('click', () => changeView.next());
+      nav.append(up);
+      if (changeView.at() >= 0) {
+        nav.append(make('span', 'pill-at', (changeView.at() + 1) + '/' + changeView.items.length));
+      }
+      nav.append(down);
+      top.append(nav);
+    }
+    if (changed) {
+      const reload = make('button', 'primary pill-reload', 'Reload');
+      reload.title = 'The document changed on disk since this page was loaded';
+      reload.addEventListener('click', () => location.reload());
+      top.append(reload);
+    }
   }
 
   async function trigger(action) {

@@ -47,7 +47,9 @@ items marked **(proposal)** are ideas, not commitments.
 - What changed since the last send: every send keeps a copy of the document (outside the
   repository); the page compares it block by block with the file, makes what is new or changed glow,
   keeps removed passages closed in its panel, folds the sections already read, and offers a navigator
-  and **Mark as read**.
+  and **Mark as read**. The panel starts folded into a pill that keeps the navigator.
+- Updates reach the daemon at the next session start: the plugin installs its new code and restarts a
+  daemon still running the old one.
 - Attach a document to any resumable conversation of the machine from the home page (open sessions
   first, filter as you type), or detach it; `annotate sessions` / `attach` / `detach` do the same.
 - Local-only HTTP API, hardened against pages that merely target `localhost`.

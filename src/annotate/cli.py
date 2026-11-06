@@ -382,6 +382,26 @@ def cmd_status(args: argparse.Namespace, cfg: config.Config) -> int:
     return 0
 
 
+def cmd_refresh(args: argparse.Namespace, cfg: config.Config) -> int:
+    """At the start of a session (the plugin's SessionStart hook). The launcher
+    has just installed this version's code (runtime.install); a daemon still
+    running the code of before is restarted through the page's own route, which
+    only systemd's daemon accepts. A plugin update then needs nothing more than a
+    new session: until 2026-11-04 the new code waited for the first docpin
+    command, and "Restart daemon" relaunched the old one.
+
+    Silent, because what a SessionStart hook prints goes into the session's
+    context; never an error, because the session's start must not depend on the
+    daemon; and never a start: a stopped daemon is left stopped. A session
+    waiting for notes reconnects (`annotate wait` retries every 5 s)."""
+    try:
+        if client.call(cfg.port, "GET", "/api/docs", timeout=2).get("stale"):
+            client.call(cfg.port, "POST", "/api/daemon/restart", timeout=2)
+    except client.ClientError as exc:
+        log.debug("refresh: %s", exc)
+    return 0
+
+
 def parser() -> argparse.ArgumentParser:
     top = argparse.ArgumentParser(prog="annotate", description=__doc__.splitlines()[0])
     top.add_argument("-v", "--verbose", action="store_true")
@@ -488,6 +508,8 @@ def parser() -> argparse.ArgumentParser:
 
     sub.add_parser("status", help="what the daemon does, in one line").set_defaults(
         run=cmd_status)
+    sub.add_parser("refresh", help="restart a daemon that runs older code than this one "
+                   "(the plugin runs it at each session start)").set_defaults(run=cmd_refresh)
     return top
 
 

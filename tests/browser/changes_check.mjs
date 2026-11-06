@@ -67,9 +67,20 @@ try {
     [...document.querySelector('annotate-root').shadowRoot.querySelectorAll(s)].map((n) => n.textContent), sel);
   const barText = () => page.evaluate(() =>
     document.querySelector('annotate-root').shadowRoot.querySelector('.bar').textContent);
+  // 0. Folded, the pill counts the changes and walks them: ▼ goes to the first.
+  await page.waitForFunction(() => document.querySelector('annotate-root').dataset.changes === 'shown');
+  const pill = await barText();
+  if (!/\d+ changes/.test(pill) || pill.includes('Changes since your last send')) fail('pill: ' + pill);
+  await page.locator('annotate-root .pill-nav', { hasText: '▼' }).click();
+  await page.locator('annotate-root .pill-open').click();
   await page.waitForFunction(() => document.querySelector('annotate-root').shadowRoot
     .querySelector('.bar').textContent.includes('Changes since your last send'));
-  step('changes panel shown');
+  const at = (await shadow('.chg-nav span'))[0];
+  if (!at.startsWith('1 / ')) fail('the pill\'s ▼ did not go to the first change: ' + at);
+  // The rest walks from the top: a reload starts the navigator again, open.
+  await page.reload();
+  await page.waitForFunction(() => document.querySelector('annotate-root').dataset.changes === 'shown');
+  step('folded, the pill counts the changes and its ▼ goes to the first; opened, the panel shows them');
 
   // 1. An addition, a modification, a removal: exactly one mark each, on the
   // right blocks (none of them inside another; nested blocks: steps 11, 12).

@@ -66,6 +66,48 @@ def daemon(monkeypatch):
     srv.server_close()
 
 
+def test_refresh_restarts_only_a_stale_daemon_and_says_nothing(daemon, tmp_path, monkeypatch,
+                                                                capsys):
+    asked: list[str] = []
+    monkeypatch.setattr(server.service, "control", asked.append)
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "registry.py").write_text("x = 1\n")
+    daemon.code_dir = code
+    daemon.code_at_start = server.code_fingerprint(code)
+    for _ in range(3):                               # up to date: left alone, each time
+        assert cli.main(["refresh"]) == 0
+    assert asked == []
+    (code / "registry.py").write_text("x = 22\n")    # an update landed
+    assert cli.main(["refresh"]) == 0
+    assert asked == ["restart"]
+    # What a SessionStart hook prints goes into the session's context.
+    assert capsys.readouterr() == ("", "")
+
+
+def test_refresh_never_starts_a_daemon_nor_fails_a_session_start(monkeypatch, capsys):
+    monkeypatch.setenv("ANNOTATE_PORT", str(_free_port()))
+    monkeypatch.setenv("ANNOTATE_AUTOSTART", "1")     # as under the plugin's launcher
+    started: list[object] = []
+    monkeypatch.setattr(cli.service, "start_daemon", lambda: started.append(1) or "systemd")
+    assert cli.main(["refresh"]) == 0
+    assert started == []
+    assert capsys.readouterr() == ("", "")
+
+
+def test_a_daemon_systemd_did_not_start_refuses_the_refresh_quietly(daemon, tmp_path,
+                                                                     monkeypatch, capsys):
+    monkeypatch.delenv("INVOCATION_ID", raising=False)   # `annotate serve` by hand
+    code = tmp_path / "code"
+    code.mkdir()
+    (code / "registry.py").write_text("x = 1\n")
+    daemon.code_dir = code
+    daemon.code_at_start = server.code_fingerprint(code)
+    (code / "registry.py").write_text("x = 2\n")
+    assert cli.main(["refresh"]) == 0
+    assert capsys.readouterr() == ("", "")
+
+
 def _listening(doc_id):
     for _ in range(300):
         if registry.summary() and cli._listening(config.load_config(), doc_id):

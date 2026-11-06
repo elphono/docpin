@@ -144,6 +144,12 @@ l'endroit où il était. Le texte d'avant d'un bloc modifié s'ouvre sous sa lig
 arrête. **Un changement dans un zoom fermé** (un `<dialog>` de document ELI) fait luire l'élément qui
 l'ouvre (`data-zoom`), et le navigateur ouvre le zoom.
 
+**Le panneau de l'overlay part replié en pastille** (2026-11-06 ; ouvert, il couvrait la droite de la
+page et y a caché une épingle). La pastille ne montre que ce qui demande le lecteur : notes à envoyer,
+note non envoyée sans passage (« lost »), changements avec ▲ ▼ et la position, « Reload » quand le
+fichier a changé ; sans rien de cela, « Alt+click to annotate ». Un clic l'ouvre. Le choix vaut pour tous
+les documents (`docpin.panel` du `localStorage`) ; sans stockage, la pastille.
+
 **Une note envoyée est de l'historique** (même jour : « les anciennes notes qui apparaissent toutes en
 haut à gauche »). Mesuré : 11 épingles sur 12 étaient ancrées dans un zoom fermé, sans boîte ;
 `visibleBox` remontait jusqu'à `body`, d'où le tas en haut à gauche. Une épingle ne se pose plus que sur
@@ -168,7 +174,13 @@ haute — et exécute la copie avec le `python3` du système ; le démon d'une c
 `current` change. Depuis la 0.5.2, `current` est un **dossier** qui porte le lien `annotate ->
 ../<empreinte>/annotate` (voir « Ce qui n'est pas évident »). Il démarre le démon à la demande
 (`client.ensure_daemon`, par systemd si l'unité existe) pour les commandes qui en ont besoin, jamais pour
-`status`. **Chaque changement publié change la version** (`pyproject.toml`, `__init__.py`,
+`status`. **Chaque ouverture de session lance `annotate refresh`** (hook `SessionStart` du plugin,
+2026-11-06) : le lanceur installe sa copie, et un démon `stale` est redémarré par la route de la page
+(`POST /api/daemon/restart`, que seul un démon de systemd accepte). Sans lui, mesuré le 2026-11-04, la
+nouvelle version attendait la première commande docpin d'une session, et « Restart daemon » relançait
+l'ancienne. La commande ne dit rien (ce qu'un hook `SessionStart` écrit entre dans le contexte de la
+session), ne démarre jamais un démon et ne fait jamais échouer le démarrage ; une session qui attend des
+notes se reconnecte (`annotate wait` réessaie toutes les 5 s). **Chaque changement publié change la version** (`pyproject.toml`, `__init__.py`,
 `.claude-plugin/plugin.json`, égales par test) : une version épinglée identique n'atteint pas les installés.
 
 **Une conversation peut passer sur l'autre machine de l'utilisateur** (2026-10-13, `sync.py`, guide
@@ -282,6 +294,8 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | `annotate is-document` répond comme la règle des dossiers, pour un `.html` et pour un `.md` (jugé comme son jumeau HTML) : le contrôle d'eli, qui a repris celui de visual-first le 2026-10-23, s'y fie | `test_is_document_answers_as_the_folders_rule_for_html_and_markdown`, `test_register_for_the_hook_refuses_a_document_under_an_excluded_folder` |
 | la synchro : rien ne part d'un dossier non autorisé ; une machine ne reçoit jamais son propre envoi ; un fichier illisible (phrase secrète fausse, abîmé) est signalé une fois et jamais retéléchargé, un stockage injoignable est réessayé ; un envoi remplace les anciens ; la page ne voit aucun secret et le fichier de réglages est en 0600 ; le stockage ne contient jamais un transcript lisible | `tests/test_sync.py` |
 | la conversation reçue va dans le clone de CETTE machine : là où l'utilisateur l'a déjà déposée, sinon un dépôt où une conversation locale a tourné (jamais un transcript reçu, dont le dossier est celui de l'autre machine), sinon le workspace | `test_a_received_transcript_is_no_evidence_of_where_a_clone_lives`, `test_a_conversation_without_a_known_clone_waits_for_its_folder` |
+| le panneau part replié en pastille, qui garde les notes à envoyer, la note perdue, les changements et leur navigation, « Reload » ; ouvert ou replié, il le reste au rechargement, sur tout document ; il tient à 390 px dans les deux états | `tests/browser/overlay_check.mjs`, `changes_check.mjs`, mutations `panel-*`, `pill-*` |
+| une ouverture de session installe la version du plugin et ne redémarre qu'un démon `stale` ; sans rien écrire, sans démarrer de démon, sans échouer | `test_each_session_start_installs_this_version_and_refreshes_the_daemon`, `test_refresh_restarts_only_a_stale_daemon_and_says_nothing`, `test_refresh_never_starts_a_daemon_nor_fails_a_session_start` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 

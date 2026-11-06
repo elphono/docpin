@@ -24,11 +24,40 @@ try {
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto(`${base}/docs/${docId}`);
   await page.waitForSelector('annotate-root', { state: 'attached' });
-  await page.waitForFunction(() => {
-    const bar = document.querySelector('annotate-root').shadowRoot.querySelector('.bar');
-    return bar && bar.textContent.includes('to send');
+  // The bar draws before the notes arrive: the notes are in once the overlay
+  // has said what changed, which it works out from them (CLAUDE.md).
+  const loaded = () => page.waitForFunction(() => {
+    const host = document.querySelector('annotate-root');
+    return host && host.dataset.changes && host.dataset.changes !== 'pending';
   });
+  await loaded();
   step('overlay loaded');
+
+  // 0. The panel starts folded into a pill: open, it covered the right of the
+  // page and hid a pin (2026-11-04). The pill keeps what asks for the reader
+  // (here the unsent note whose passage is gone), and the choice is remembered.
+  const panel = () => page.evaluate(() => {
+    const bar = document.querySelector('annotate-root').shadowRoot.querySelector('.bar');
+    const r = bar.getBoundingClientRect();
+    return { folded: bar.classList.contains('collapsed'), text: bar.textContent.replace(/\s+/g, ' ').trim(),
+      width: Math.round(r.width), height: Math.round(r.height), status: Boolean(bar.querySelector('.status')) };
+  });
+  let seen = await panel();
+  if (!seen.folded || seen.status) fail('the panel is not folded at first: ' + seen.text);
+  if (!seen.text.includes('1 lost')) fail('the pill hides the note whose passage is gone: ' + seen.text);
+  if (seen.height > 48 || seen.width > 360) fail(`the pill is ${seen.width}x${seen.height}`);
+  await page.locator('annotate-root .pill-open').click();
+  await page.waitForSelector('annotate-root .status');
+  await page.reload();
+  await loaded();
+  if ((await panel()).folded) fail('the opened panel did not stay open across a reload');
+  await page.locator('annotate-root button.toggle').click();
+  await page.reload();
+  await loaded();
+  if (!(await panel()).folded) fail('the folded panel did not stay folded across a reload');
+  await page.locator('annotate-root .pill-open').click();
+  await page.waitForSelector('annotate-root .status');
+  step(`folded at first into a ${seen.width}x${seen.height} pill ("${seen.text}"), opened and folded, each kept across a reload`);
 
   // 1. The pre-seeded orphan is listed with its quote, never dropped.
   const orphanText = await page.locator('.orphan').first().textContent();
@@ -135,12 +164,18 @@ try {
   }, null, { timeout: 15000 });
   step('the edit on disk is noticed, Reload offered');
   await page.screenshot({ path: join(outDir, 'overlay-after-send.png'), fullPage: false });
+  await page.locator('annotate-root button.toggle').click();
+  if (await page.locator('annotate-root .pill-reload').count() !== 1) fail('folded, the pill does not offer Reload');
+  step('folded, the pill still offers Reload');
 
-  // 7. Phone width: the bar fits, no horizontal scroll introduced by it.
+  // 7. Phone width: the pill and the open panel fit, no horizontal scroll.
   await page.setViewportSize({ width: 390, height: 800 });
-  const barBox = await page.locator('.bar').boundingBox();
-  if (barBox.x < 0 || barBox.x + barBox.width > 390) fail('bar overflows at 390 px');
-  step('bar fits at 390 px');
+  for (const state of ['folded', 'open']) {
+    if (state === 'open') await page.locator('annotate-root .pill-open').click();
+    const barBox = await page.locator('.bar').boundingBox();
+    if (barBox.x < 0 || barBox.x + barBox.width > 390) fail(`bar overflows at 390 px, ${state}`);
+  }
+  step('bar fits at 390 px, folded and open');
   await page.screenshot({ path: join(outDir, 'overlay-phone.png') });
 
   if (errors.length) fail('page errors: ' + errors.join(' | '));
