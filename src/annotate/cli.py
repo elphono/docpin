@@ -385,19 +385,35 @@ def cmd_status(args: argparse.Namespace, cfg: config.Config) -> int:
 def cmd_refresh(args: argparse.Namespace, cfg: config.Config) -> int:
     """At the start of a session (the plugin's SessionStart hook). The launcher
     has just installed this version's code (runtime.install); a daemon still
-    running the code of before is restarted through the page's own route, which
-    only systemd's daemon accepts. A plugin update then needs nothing more than a
-    new session: until 2026-11-04 the new code waited for the first docpin
-    command, and "Restart daemon" relaunched the old one.
+    running the code of before is restarted. Under systemd, through the page's
+    own route; refused there, the daemon docpin started itself without systemd
+    (the only kind on macOS) is stopped and started again on the new copy. A
+    daemon started by hand is left alone. A plugin update then needs nothing
+    more than a new session: until 2026-11-04 the new code waited for the first
+    docpin command, and "Restart daemon" relaunched the old one; until
+    2026-11-06, a daemon started without systemd kept the old code until the
+    machine restarted.
 
     Silent, because what a SessionStart hook prints goes into the session's
     context; never an error, because the session's start must not depend on the
-    daemon; and never a start: a stopped daemon is left stopped. A session
+    daemon; and never a start of a daemon that was not running. A session
     waiting for notes reconnects (`annotate wait` retries every 5 s)."""
     try:
-        if client.call(cfg.port, "GET", "/api/docs", timeout=2).get("stale"):
+        if not client.call(cfg.port, "GET", "/api/docs", timeout=2).get("stale"):
+            return 0
+        try:
             client.call(cfg.port, "POST", "/api/daemon/restart", timeout=2)
-    except client.ClientError as exc:
+            return 0
+        except client.DaemonUnreachable:
+            raise
+        except client.ClientError as refused:          # not systemd's daemon
+            pid = service.on_demand_daemon(cfg.port)
+            if pid is None:
+                log.debug("refresh: %s; no daemon of docpin's own start listens", refused)
+                return 0
+        service.stop_daemon_process(pid, cfg.port)
+        client.ensure_daemon(cfg.port, service.start_daemon)
+    except (client.ClientError, service.ServiceError, OSError) as exc:
         log.debug("refresh: %s", exc)
     return 0
 

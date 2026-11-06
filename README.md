@@ -149,8 +149,12 @@ a script or a helper agent wrote them, within 30 seconds.
 In a terminal:
 
 - Update: `claude plugin update docpin@docpin`, then start a new session. Its start installs the
-  new version and restarts the daemon if it still runs the old one; a session waiting for notes
-  reconnects on its own.
+  new version and restarts the daemon if it still runs the old one, as a service or not (a daemon you
+  started yourself with `annotate serve` is left alone); a session waiting for notes reconnects on
+  its own.
+- Automatic updates: Claude Code does not update plugins from a marketplace like this one unless you
+  ask it to. In a session, `/plugin`, tab **Marketplaces**, select **docpin**, then **Enable
+  auto-update**. A session start then downloads a new version, and the next one installs it.
 - Uninstall: `claude plugin uninstall docpin@docpin`. Your notes stay in
   `~/.local/share/annotate`; delete that folder to remove them too.
 

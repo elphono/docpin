@@ -178,8 +178,15 @@ haute — et exécute la copie avec le `python3` du système ; le démon d'une c
 2026-11-06) : le lanceur installe sa copie, et un démon `stale` est redémarré par la route de la page
 (`POST /api/daemon/restart`, que seul un démon de systemd accepte). Sans lui, mesuré le 2026-11-04, la
 nouvelle version attendait la première commande docpin d'une session, et « Restart daemon » relançait
-l'ancienne. La commande ne dit rien (ce qu'un hook `SessionStart` écrit entre dans le contexte de la
-session), ne démarre jamais un démon et ne fait jamais échouer le démarrage ; une session qui attend des
+l'ancienne. **La route refuse, le démon que docpin a lancé lui-même sans systemd est remplacé** (0.8.1,
+le seul genre sur macOS, et sous Linux sans `annotate service` : il gardait l'ancienne version jusqu'au
+redémarrage de la machine). `service.on_demand_daemon` le retrouve par le port (`/proc/net/tcp`, sinon
+`lsof`) et ne nomme qu'un processus de l'utilisateur dont la commande est celle du démarrage à la demande
+(`python -P -m annotate serve`) et qui n'a pas d'`INVOCATION_ID` : un `annotate serve` lancé à la main
+n'est jamais arrêté, ni le démon de l'unité (même commande). SIGTERM, attente que le port se libère, puis
+`start_daemon` sur `current`. La commande ne dit rien (ce qu'un hook `SessionStart` écrit entre dans le
+contexte de la session), ne démarre jamais un démon qui ne tournait pas et ne fait jamais échouer le
+démarrage ; une session qui attend des
 notes se reconnecte (`annotate wait` réessaie toutes les 5 s). **Chaque changement publié change la version** (`pyproject.toml`, `__init__.py`,
 `.claude-plugin/plugin.json`, égales par test) : une version épinglée identique n'atteint pas les installés.
 
@@ -295,7 +302,7 @@ commit, les descriptions de MR/PR et les commentaires de code : ni `Co-Authored-
 | la synchro : rien ne part d'un dossier non autorisé ; une machine ne reçoit jamais son propre envoi ; un fichier illisible (phrase secrète fausse, abîmé) est signalé une fois et jamais retéléchargé, un stockage injoignable est réessayé ; un envoi remplace les anciens ; la page ne voit aucun secret et le fichier de réglages est en 0600 ; le stockage ne contient jamais un transcript lisible | `tests/test_sync.py` |
 | la conversation reçue va dans le clone de CETTE machine : là où l'utilisateur l'a déjà déposée, sinon un dépôt où une conversation locale a tourné (jamais un transcript reçu, dont le dossier est celui de l'autre machine), sinon le workspace | `test_a_received_transcript_is_no_evidence_of_where_a_clone_lives`, `test_a_conversation_without_a_known_clone_waits_for_its_folder` |
 | le panneau part replié en pastille, qui garde les notes à envoyer, la note perdue, les changements et leur navigation, « Reload » ; ouvert ou replié, il le reste au rechargement, sur tout document ; il tient à 390 px dans les deux états | `tests/browser/overlay_check.mjs`, `changes_check.mjs`, mutations `panel-*`, `pill-*` |
-| une ouverture de session installe la version du plugin et ne redémarre qu'un démon `stale` ; sans rien écrire, sans démarrer de démon, sans échouer | `test_each_session_start_installs_this_version_and_refreshes_the_daemon`, `test_refresh_restarts_only_a_stale_daemon_and_says_nothing`, `test_refresh_never_starts_a_daemon_nor_fails_a_session_start` |
+| une ouverture de session installe la version du plugin et ne redémarre qu'un démon `stale` ; sans rien écrire, sans démarrer de démon qui ne tournait pas, sans échouer ; le démon lancé à la demande sans systemd est arrêté (SIGTERM) et relancé sur la nouvelle version, jamais un démon lancé à la main ni celui de l'unité | `test_each_session_start_installs_this_version_and_refreshes_the_daemon`, `test_refresh_restarts_only_a_stale_daemon_and_says_nothing`, `test_refresh_never_starts_a_daemon_nor_fails_a_session_start`, `test_a_session_start_replaces_the_daemon_docpin_started_without_systemd`, `test_a_session_start_never_stops_a_daemon_started_by_hand`, `test_only_a_listener_with_the_on_demand_command_outside_systemd_is_named`, mutations `refresh-*` |
 | `/docs/<id>/files/` ne sert rien hors du dossier du document | `test_relative_files_are_served_and_nothing_outside_the_folder` |
 | aucune valeur de déploiement en dur (home, distribution, IP, port hors `config.DEFAULT_PORT`) | `test_no_deployment_value_is_written_in_the_code`, avec son témoin |
 

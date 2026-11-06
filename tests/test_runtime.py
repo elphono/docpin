@@ -18,8 +18,11 @@ import hashlib
 import os
 import re
 import shutil
+import signal
+import socket
 import subprocess
 import sys
+import time
 import types
 from pathlib import Path
 
@@ -318,3 +321,122 @@ def test_status_says_which_docpin_the_daemon_runs_and_whether_it_is_stale(monkey
     assert lines[0] == f"daemon up on :{cfg.port}, docpin 0.5.2, 0 document(s)"
     assert lines[1].startswith(lines[0] + "; stale: ") and "restart it" in lines[1]
     assert lines[2] == f"daemon up on :{cfg.port}, 0 document(s)"
+
+
+# ------------------------------------- a session start and the on-demand daemon
+
+def _free_port() -> int:
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+@pytest.fixture
+def machine(tmp_path, monkeypatch):
+    """A machine where the plugin runs without a systemd unit (macOS, or Linux
+    without `annotate service`): its own port and home, and every process a
+    test starts here is stopped at the end."""
+    port = _free_port()
+    monkeypatch.setenv("ANNOTATE_PORT", str(port))
+    monkeypatch.setenv("ANNOTATE_LAUNCHER", "annotate")
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))  # a daemon never reads the real ~/.claude
+    monkeypatch.delenv("INVOCATION_ID", raising=False)
+    monkeypatch.setattr(service, "unit_path", lambda: tmp_path / "no-unit.service")
+    started: list[subprocess.Popen] = []
+
+    def start(argv: list[str], **env: str) -> subprocess.Popen:
+        config.data_dir().mkdir(parents=True, exist_ok=True)
+        log = open(config.data_dir() / f"test-{len(started)}.log", "ab")  # noqa: SIM115
+        child = subprocess.Popen(argv, cwd=config.data_dir(), stdout=log, stderr=log,
+                                 env={**os.environ, "PYTHONPATH": str(runtime.current()), **env})
+        started.append(child)
+        return child
+
+    yield types.SimpleNamespace(port=port, start=start)
+    pids = {child.pid for child in started}
+    pid = service.on_demand_daemon(port)
+    if pid is not None:
+        pids.add(pid)                                  # the one `refresh` started
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+    for child in started:
+        child.wait(timeout=10)
+
+
+def _answer(port: int, wait: float = 15.0) -> dict:
+    deadline = time.monotonic() + wait
+    while True:
+        try:
+            return client.call(port, "GET", "/api/docs", timeout=2)
+        except client.DaemonUnreachable:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.1)
+
+
+ON_DEMAND = [sys.executable, "-P", "-m", "annotate", "serve"]       # service.start_daemon
+
+
+def test_a_session_start_replaces_the_daemon_docpin_started_without_systemd(tmp_path, machine):
+    """Measured on 2026-11-06: such a daemon refused the restart route and kept
+    the old code until the machine restarted, whatever the session did."""
+    runtime.install(release(tmp_path, "v080", "0.8.0"))
+    old = machine.start(ON_DEMAND)
+    assert _answer(machine.port)["version"] == "0.8.0"
+    for round_, version in enumerate(["0.8.1", "0.8.2"]):
+        runtime.install(release(tmp_path, f"new{round_}", version))
+        assert _answer(machine.port)["stale"]
+        assert cli.main(["refresh"]) == 0
+        if round_ == 0:
+            assert old.wait(timeout=10) == 0            # stopped, not killed
+        now = _answer(machine.port)
+        assert now["version"] == version and not now["stale"]
+        pid = service.on_demand_daemon(machine.port)
+        assert pid is not None and pid != old.pid
+        assert cli.main(["refresh"]) == 0               # up to date: left alone
+        assert service.on_demand_daemon(machine.port) == pid
+
+
+def test_a_session_start_never_stops_a_daemon_started_by_hand(tmp_path, machine):
+    runtime.install(release(tmp_path, "v080", "0.8.0"))
+    by_hand = machine.start([sys.executable, str(Path(sys.executable).parent / "annotate"),
+                             "serve"])                  # `annotate serve` in a terminal
+    assert _answer(machine.port)["version"] == "0.8.0"
+    runtime.install(release(tmp_path, "v081", "0.8.1"))
+    assert _answer(machine.port)["stale"]
+    assert cli.main(["refresh"]) == 0
+    assert by_hand.poll() is None and _answer(machine.port)["stale"]
+    assert service.on_demand_daemon(machine.port) is None
+
+
+LISTEN = ("import socket, sys, time; s = socket.socket(); "
+          "s.bind(('127.0.0.1', int(sys.argv[1]))); s.listen(); time.sleep(120)")
+
+
+@pytest.mark.parametrize("through", ["proc", "lsof"])
+def test_only_a_listener_with_the_on_demand_command_outside_systemd_is_named(
+        tmp_path, machine, monkeypatch, through):
+    """The same command under systemd is the unit's daemon: systemd restarts
+    it, never a signal from here. The lsof branch is the one of macOS."""
+    if through == "lsof":
+        if not shutil.which("lsof"):
+            pytest.skip("lsof is not installed")
+        monkeypatch.setattr(service, "PROC_TCP", tmp_path / "no-proc" / "net" / "tcp")
+    runtime.install(release(tmp_path, "v080", "0.8.0"))
+    port = str(machine.port)
+    cases = [([sys.executable, "-c", LISTEN, port, "-m", "annotate", "serve"], {}, True),
+             ([sys.executable, "-c", LISTEN, port, "-m", "annotate", "serve"],
+              {"INVOCATION_ID": "0123"}, False),
+             ([sys.executable, "-c", LISTEN, port, "-m", "annotate", "list"], {}, False)]
+    for argv, env, named in cases:
+        child = machine.start(argv, **env)
+        deadline = time.monotonic() + 10
+        while not service._listeners(machine.port):
+            assert time.monotonic() < deadline and child.poll() is None
+            time.sleep(0.05)
+        assert service.on_demand_daemon(machine.port) == (child.pid if named else None)
+        child.kill()
+        child.wait(timeout=10)

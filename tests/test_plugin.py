@@ -14,7 +14,6 @@ import shutil
 import socket
 import subprocess
 import sys
-import time
 import tomllib
 from pathlib import Path
 
@@ -117,7 +116,10 @@ def test_a_new_version_gets_a_copy_of_its_own_and_three_are_kept(tmp_path):
         stamp = runtime.fingerprint(launcher.parent.parent / "src" / "annotate")
         assert runtime.named() == stamp
         seen.append(stamp)
-        time.sleep(0.02)                             # distinct folder dates
+        # Distinct folder dates, set rather than slept for: the wall clock can
+        # step back during a run (one run in eight failed, 2026-11-06, WSL).
+        date = 1_700_000_000 + round_
+        os.utime(runtime.runtime_dir() / stamp, (date, date))
     assert len(set(seen)) == 4
     assert copies() == sorted(seen[1:])              # the oldest one is pruned
 
