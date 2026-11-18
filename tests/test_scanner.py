@@ -142,7 +142,8 @@ def test_a_failing_pass_does_not_stop_the_scan(ws, monkeypatch):
             stop.set()
 
     monkeypatch.setattr(scanner, "scan_once", flaky)
-    thread = threading.Thread(target=scanner.run, args=(stop, 0.01), daemon=True)
+    thread = threading.Thread(target=scanner.run, args=(stop, 0.01),
+                              kwargs={"listening": nobody}, daemon=True)
     thread.start()
     thread.join(5)
     assert not thread.is_alive() and len(calls) == 3
@@ -463,6 +464,70 @@ def test_a_missing_file_is_always_taken_even_with_every_protection(ws):
     assert registry.protection({"exists": False, "listening": True, "status": "delivered",
                                 "pending": 3}) == ""
     assert registry.protection({"exists": True, "listening": True}) != ""
+
+
+# -- the regular pass drops what is gone (2026-11-18) ------------------------------
+
+def test_a_document_whose_file_is_gone_leaves_the_list_at_the_next_pass(ws):
+    """Temporary copies of a repository left their docs/ listed as "file
+    missing" once deleted, 457 of them in two weeks. Its twin, still on the
+    disk, stays: only what is gone goes."""
+    gone = registry.register(write(ws, "repo-copy/docs/report.html", NOW))["id"]
+    kept = registry.register(write(ws, "repo/docs/report.html", NOW))["id"]
+    Path(registry.get(gone)["path"]).unlink()
+    assert [item["id"] for item in scanner.drop_gone(nobody)] == [gone]
+    assert list(registry.all_docs()) == [kept]
+    assert scanner.drop_gone(nobody) == []
+
+
+def test_a_gone_file_is_kept_while_a_note_or_a_session_needs_it(ws):
+    """The pass runs unasked: it never drops what the user's batches would
+    keep if the file were there. Each protection alone keeps its document;
+    the plain one beside them goes, so that nothing passes by dropping
+    nothing."""
+    paths = {name: write(ws, f"repo/docs/{name}.html", NOW)
+             for name in ("listened", "delivered", "notes", "plain")}
+    ids = {name: registry.register(path)["id"] for name, path in paths.items()}
+    registry.update(ids["delivered"], status="delivered")
+    registry.replace_annotations(ids["notes"], note("not sent yet"))
+    for path in paths.values():
+        path.unlink()
+    dropped = scanner.drop_gone(lambda i: i == ids["listened"])
+    assert [item["id"] for item in dropped] == [ids["plain"]]
+    assert set(registry.all_docs()) == {ids["listened"], ids["delivered"], ids["notes"]}
+    assert registry.list_annotations(ids["notes"])[0]["note"] == "not sent yet"
+
+
+def test_a_gone_file_written_again_is_listed_again(ws):
+    """Gone, dropped, written again: three times, the same path comes back
+    each time it reappears (a branch switched away and back)."""
+    scanner.scan_once(now=1000.0)
+    for turn in range(3):
+        moment = 2000.0 + 1000.0 * turn
+        path = write(ws, "repo/docs/flip.html", moment + 500.0)
+        [doc_id] = scanner.scan_once(now=moment + 1000.0)
+        assert registry.get(doc_id)["path"] == str(path)
+        path.unlink()
+        assert [item["id"] for item in scanner.drop_gone(nobody)] == [doc_id]
+        assert registry.all_docs() == {}
+
+
+def test_the_daemon_pass_drops_the_gone_files(ws):
+    gone = registry.register(write(ws, "repo/docs/gone.html", NOW))["id"]
+    waited = registry.register(write(ws, "repo/docs/waited.html", NOW))["id"]
+    for doc_id in (gone, waited):
+        Path(registry.get(doc_id)["path"]).unlink()
+    stop = threading.Event()
+
+    class OneTick:
+        def tick(self, now=None):
+            stop.set()
+
+    thread = threading.Thread(target=scanner.run, args=(stop, 0.01, OneTick()),
+                              kwargs={"listening": lambda i: i == waited}, daemon=True)
+    thread.start()
+    thread.join(5)
+    assert not thread.is_alive() and list(registry.all_docs()) == [waited]
 
 
 def test_adding_a_folder_never_unmanages_an_older_document(ws, tmp_path, monkeypatch):

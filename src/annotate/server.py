@@ -672,7 +672,8 @@ def serve(cfg: Config) -> int:
     worker = threading.Thread(target=srv.serve_forever, name="http", daemon=True)
     worker.start()
     scan_stop = threading.Event()
-    threading.Thread(target=scanner.run, args=(scan_stop,), name="scan",
+    threading.Thread(target=scanner.run, args=(scan_stop,),
+                     kwargs={"listening": srv.sender.board.listening}, name="scan",
                      daemon=True).start()
     threading.Thread(target=sync.run, args=(scan_stop,), name="sync",
                      daemon=True).start()

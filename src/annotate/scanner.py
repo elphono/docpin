@@ -30,6 +30,14 @@ times (0.2 s each, measured).
 documents of the window, and those older are unmanaged (`prune`), as an
 Unmanage does, never one that registry.protection keeps. Adding a folder
 only catches up.
+
+**A document whose file is gone leaves the list at the next pass** (decision
+of 2026-11-18, `drop_gone`): temporary copies of a repository (a `git
+worktree add` next to the clone, for a mutation campaign or a test suite) had
+their `docs/` registered, then were deleted, and left 457 "file missing" rows
+in two weeks. Only a document `registry.protection` would keep if its file
+were there stays: notes waiting to be sent, a session listening, `delivered`.
+Its file written again, it is registered again like any new document.
 """
 from __future__ import annotations
 
@@ -191,6 +199,21 @@ def rescan(days: float, only: str | None = None, now: float | None = None, *,
             "kept": pruned["kept"]}
 
 
+def drop_gone(listening: Callable[[str], bool]) -> list[dict[str, Any]]:
+    """Unmanage the documents whose file is gone, except those
+    `registry.protection` would keep if the file were still there (the
+    batches the user starts take a missing file whatever it carries; this
+    pass runs unasked, so it never drops a note nobody read). Return what
+    went."""
+    def gone_and_free(doc: dict[str, Any]) -> bool:
+        return not doc["exists"] and not registry.protection({**doc, "exists": True})
+
+    result = registry.forget_batch(gone_and_free, listening, cleanup=False)
+    for item in result["forgotten"]:
+        log.info("scan: %s unmanaged, its file is gone", item["path"])
+    return result["forgotten"]
+
+
 def check_days(raw: object) -> float:
     """The window of a catch-up, from a request: a number of days, 7 if absent."""
     if raw is None or raw == "":
@@ -254,17 +277,23 @@ class CatchUps:
 
 
 def run(stop: threading.Event, every: float = SCAN_EVERY,
-        sweeper: cleanup.Sweeper | None = None) -> None:
-    """The daemon's thread: a pass, the deletions "Cleanup files" made due
-    (at most once an hour: cleanup.Sweeper), then a wait that `stop`
-    interrupts. A failing pass or sweep is logged and the next one is tried:
-    neither may take the daemon down."""
+        sweeper: cleanup.Sweeper | None = None, *,
+        listening: Callable[[str], bool]) -> None:
+    """The daemon's thread: a pass, the documents whose file is gone dropped
+    (`drop_gone`, `listening` naming those a session waits for), the
+    deletions "Cleanup files" made due (at most once an hour:
+    cleanup.Sweeper), then a wait that `stop` interrupts. A failing step is
+    logged and the next one is tried: none may take the daemon down."""
     sweeper = cleanup.Sweeper() if sweeper is None else sweeper
     while not stop.is_set():
         try:
             scan_once()
         except Exception as exc:  # noqa: BLE001 - see the docstring
             log.error("scan failed: %s", exc)
+        try:
+            drop_gone(listening)
+        except Exception as exc:  # noqa: BLE001 - see the docstring
+            log.error("dropping the gone files failed: %s", exc)
         try:
             sweeper.tick()
         except Exception as exc:  # noqa: BLE001 - see the docstring

@@ -236,7 +236,8 @@ def test_the_scan_thread_sweeps_and_a_failing_sweep_does_not_stop_it(monkeypatch
                 raise OSError("disk hiccup")
 
     monkeypatch.setattr(scanner, "scan_once", counted)
-    thread = threading.Thread(target=scanner.run, args=(stop, 0.01, Flaky()), daemon=True)
+    thread = threading.Thread(target=scanner.run, args=(stop, 0.01, Flaky()),
+                              kwargs={"listening": lambda _: False}, daemon=True)
     thread.start()
     thread.join(5)
     assert not thread.is_alive() and len(passes) == 3 and len(ticks) == 3
