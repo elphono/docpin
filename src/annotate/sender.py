@@ -76,6 +76,12 @@ class Sender:
         # unsent notes twice, deliver them once, and open a tab with them too.
         self._lock = threading.Lock()
 
+    @property
+    def opener(self) -> Any:
+        """What opens a terminal tab (`terminal.open_session`, a double in
+        tests): the daemon's other tabs go through it too."""
+        return self._open
+
     def dispatch(self, doc_id: str, *, fresh: bool = False) -> dict[str, Any]:
         with self._lock:
             return self._dispatch(doc_id, fresh)

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import annotate
-from annotate import browser, claude, listeners, registry, sender, server
+from annotate import browser, claude, listeners, registry, sender, server, terminal
 from annotate.config import Config
 from fakes import RecordingOpener, compact, conversation, register_session, transcript
 
@@ -670,3 +670,113 @@ def test_cleanup_files_from_the_page_keeps_the_document_a_session_waits_for(daem
     assert (body["forgotten"], body["kept"]) == (0, 1) and doc_id in registry.all_docs()
     daemon.srv.sender.board.deliver(doc_id, "release")
     thread.join(10)
+
+
+# -- resume a session from its id chip (2026-11-18) ----------------------------
+
+def _resume(daemon, session, **kwargs):
+    return daemon.request("POST", f"/api/sessions/{session}/resume", **kwargs)
+
+
+def test_resuming_a_session_opens_one_tab_without_a_prompt_in_its_latest_document_folder(
+        daemon, make_doc, tmp_path):
+    """The folder is the one of the most recent listed document, not the
+    transcript's: a conversation received from the other machine names a
+    folder of that machine there."""
+    older, newer = tmp_path / "older", tmp_path / "newer"
+    older.mkdir()
+    newer.mkdir()
+    conversation(claude.projects_dir(), "s-res", cwd="/the/other/machine", title="Resumed one")
+    first = registry.register(make_doc("<p>a</p>", name="a.html"), session="s-res", cwd=older)
+    second = registry.register(make_doc("<p>b</p>", name="b.html"), session="s-res", cwd=newer)
+    registry.update(first["id"], registered_at="2026-01-01T00:00:00+00:00")
+    registry.update(second["id"], registered_at="2026-01-02T00:00:00+00:00")
+    status, body = _resume(daemon, "s-res")
+    assert status == 200, body
+    assert (body["session"], body["cwd"]) == ("s-res", str(newer.resolve()))
+    assert body["message"] == f"Resumed one resumed in a terminal tab, in {newer.resolve()}."
+    assert daemon.opener.calls == [{"doc_id": "resume-s-res", "cwd": str(newer.resolve()),
+                                    "claude_bin": daemon.srv.cfg.claude_bin,
+                                    "resume": "s-res", "prompt": ""}]
+    assert registry.get(first["id"])["status"] == "new", "a resume changes no document"
+
+
+def test_a_resume_falls_back_like_send_when_the_document_folder_is_gone(daemon, make_doc,
+                                                                         tmp_path):
+    gone = tmp_path / "gone"
+    gone.mkdir()
+    conversation(claude.projects_dir(), "s-gone")
+    path = make_doc("<p>a</p>")
+    registry.register(path, session="s-gone", cwd=gone)
+    gone.rmdir()
+    status, body = _resume(daemon, "s-gone")
+    want = str(registry.usable_cwd(str(gone.resolve()), path))
+    assert status == 200 and body["cwd"] == want and want != str(gone.resolve())
+    assert [c["cwd"] for c in daemon.opener.calls] == [want]
+
+
+def test_an_open_session_is_never_resumed_in_a_second_tab(daemon, make_doc, tmp_path):
+    conversation(claude.projects_dir(), "s-open")
+    registry.register(make_doc("<p>a</p>"), session="s-open")
+    (tmp_path / "s.sock").write_text("")
+    register_session("s-open", tmp_path / "s.sock")
+    status, body = _resume(daemon, "s-open")
+    assert status == 409 and "already open" in body["error"]
+    assert daemon.opener.calls == []
+
+
+def test_a_session_this_machine_cannot_resume_gets_no_tab(daemon, make_doc):
+    projects = claude.projects_dir()
+    transcript(projects, "s-title-only", lines=(compact({"type": "ai-title", "aiTitle": "T"}),))
+    registry.register(make_doc("<p>a</p>", name="a.html"), session="s-title-only")
+    registry.register(make_doc("<p>b</p>", name="b.html"), session="s-nowhere")
+    for session in ("s-title-only", "s-nowhere"):
+        status, body = _resume(daemon, session)
+        assert status == 409 and "would not find it" in body["error"], (session, body)
+    assert daemon.opener.calls == []
+
+
+def test_a_session_no_listed_document_carries_or_a_bad_id_gets_no_tab(daemon, make_doc):
+    conversation(claude.projects_dir(), "s-unlisted")
+    registry.register(make_doc("<p>a</p>"), session="s-listed")
+    status, body = _resume(daemon, "s-unlisted")
+    assert status == 404 and "no listed document" in body["error"]
+    for bad in ("a%20b", "..%2Fetc", "-rf", "x" * 65):
+        status, body = _resume(daemon, bad)
+        assert status == 400 and "is not a session id" in body["error"], (bad, body)
+    assert daemon.request("GET", "/api/sessions/s-listed/resume")[0] == 405
+    assert daemon.opener.calls == []
+
+
+def test_resuming_needs_the_client_header_and_a_local_origin(daemon, make_doc):
+    conversation(claude.projects_dir(), "s-hdr")
+    registry.register(make_doc("<p>a</p>"), session="s-hdr")
+    conn = http.client.HTTPConnection("127.0.0.1", daemon.port, timeout=10)
+    conn.request("POST", "/api/sessions/s-hdr/resume", headers={"Host": f"localhost:{daemon.port}"})
+    assert conn.getresponse().status == 403
+    conn.close()
+    assert _resume(daemon, "s-hdr", headers={"Origin": "https://evil.example"})[0] == 403
+    assert daemon.opener.calls == []
+    assert _resume(daemon, "s-hdr")[0] == 200                   # the same, with the header
+    assert len(daemon.opener.calls) == 1
+
+
+def test_a_tab_that_cannot_open_is_an_http_error_with_its_reason(daemon, make_doc):
+    conversation(claude.projects_dir(), "s-fail")
+    registry.register(make_doc("<p>a</p>"), session="s-fail")
+    daemon.opener.fail = terminal.TerminalError("wt.exe exited 1: no window")
+    status, body = _resume(daemon, "s-fail")
+    assert status == 500 and "wt.exe exited 1: no window" in body["error"]
+    assert len(daemon.opener.calls) == 1
+    # The daemon still answers on a fresh connection.
+    assert daemon.request("GET", "/api/docs")[0] == 200
+
+
+def test_an_arrival_whose_tab_cannot_open_is_an_http_error_with_its_reason(daemon,
+                                                                           monkeypatch):
+    def refuse(session, cfg):
+        raise terminal.TerminalError("neither wt.exe nor cmd.exe is on the PATH")
+
+    monkeypatch.setattr(server.sync, "resume", refuse)
+    status, body = daemon.request("POST", "/api/sync/arrivals/s-arr/resume")
+    assert status == 500 and "neither wt.exe nor cmd.exe" in body["error"]

@@ -144,6 +144,10 @@ Both machines should run the same Claude Code version.
 another folder, add it on the home page (`! annotate open` in a session). Documents also show up when
 a script or a helper agent wrote them, within 30 seconds.
 
+**Back to a closed session?** On the home page, click the session id next to its title: a terminal
+tab resumes that conversation, where you type the next message. An open session's id is not
+clickable: it already has its terminal.
+
 ## Update, uninstall
 
 In a terminal:

@@ -101,3 +101,41 @@ def test_a_missing_session_folder_opens_nothing(tmp_path, monkeypatch):
         terminal.open_session("d1", str(tmp_path / "gone"), "claude", None, "x")
     assert read_log(wt_log) == []
     assert not (config.data_dir() / "launch").exists()
+
+
+def test_a_resume_without_a_prompt_passes_no_argument_after_the_session(tmp_path):
+    """The index page resumes a session for the user to type in: nothing, not
+    even an empty string, follows the id, and no prompt file is written."""
+    fake, log = write_fake_claude(tmp_path / "bin")
+    cwd = tmp_path / "a repo with 'quotes'; and spaces"
+    cwd.mkdir()
+    script = terminal.write_launch("resume-sess-7", str(cwd), str(fake), "sess-7", "")
+    assert [p.name for p in script.parent.iterdir()] == [script.name], "no .prompt file"
+    subprocess.run(["bash", str(script)], check=True, timeout=30)
+    assert read_log(log) == [{"argv": ["--resume", "sess-7"], "cwd": str(cwd)}]
+    assert list(script.parent.iterdir()) == [], "the script deletes itself"
+
+
+def test_a_resume_without_a_prompt_deletes_its_script_even_when_the_folder_is_gone(tmp_path):
+    fake, log = write_fake_claude(tmp_path / "bin")
+    cwd = tmp_path / "soon-gone"
+    cwd.mkdir()
+    script = terminal.write_launch("resume-sess-8", str(cwd), str(fake), "sess-8", "")
+    cwd.rmdir()
+    done = subprocess.run(["bash", str(script)], capture_output=True, timeout=30)
+    assert done.returncode != 0 and read_log(log) == []
+    assert list(script.parent.iterdir()) == []
+
+
+def test_open_session_without_a_prompt_runs_the_tab_end_to_end(tmp_path, monkeypatch):
+    """The real open_session, without a prompt: the same tab (`-w 0 new-tab`),
+    and `claude --resume <id>` alone."""
+    wt_log = write_fake_wt(tmp_path / "wt", monkeypatch)
+    fake, log = write_fake_claude(tmp_path / "bin")
+    monkeypatch.setenv("WSL_DISTRO_NAME", "Test-Distro")
+    assert terminal.open_session("resume-sess-6", str(tmp_path), str(fake), "sess-6",
+                                 "") == "fake-wt.exe"
+    [argv] = read_log(wt_log)
+    assert argv[:5] == ["-w", "0", "new-tab", "--title", "annotate-resume-sess-6"]
+    assert read_log(log) == [{"argv": ["--resume", "sess-6"], "cwd": str(tmp_path)}]
+    assert list((config.data_dir() / "launch").iterdir()) == []

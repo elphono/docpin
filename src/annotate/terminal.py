@@ -35,6 +35,12 @@ The prompt reaches `claude` as ONE argument read from a file
 (`"$(cat …)"`): no quoting of user text ever happens on a command line. A
 prompt starting with `-` would be read as an option, so the prompt never
 starts with one (prompt.build starts with a word).
+
+**Without a prompt** (the index page's "resume this session", where the user
+types the first message himself), no prompt file is written and the script
+runs `claude --resume <id>` with nothing after it: an empty `"$prompt"` would
+still reach `claude` as one more, empty argument. The script deletes itself
+first, before the `cd` that may fail.
 """
 from __future__ import annotations
 
@@ -80,11 +86,18 @@ def distro() -> str:
     return parts[1]
 
 
-def script_text(cwd: str, claude: str, resume: str | None, prompt_file: Path) -> str:
+def script_text(cwd: str, claude: str, resume: str | None,
+                prompt_file: Path | None) -> str:
+    """The launch script. Without a prompt file, `claude` gets no argument
+    after the session (module docstring)."""
     command = [claude] + (["--resume", resume] if resume else [])
-    return ("#!/bin/bash\n"
-            "# Written by annotate (terminal.py): one session, then deleted.\n"
-            f"cd {shlex.quote(cwd)} || exit 1\n"
+    head = ("#!/bin/bash\n"
+            "# Written by annotate (terminal.py): one session, then deleted.\n")
+    if prompt_file is None:
+        return (head + "rm -f \"$0\"\n"
+                f"cd {shlex.quote(cwd)} || exit 1\n"
+                f"exec {shlex.join(command)}\n")
+    return (head + f"cd {shlex.quote(cwd)} || exit 1\n"
             f"prompt=\"$(cat {shlex.quote(str(prompt_file))})\"\n"
             f"rm -f {shlex.quote(str(prompt_file))} \"$0\"\n"
             f"exec {shlex.join(command)} \"$prompt\"\n")
@@ -92,14 +105,16 @@ def script_text(cwd: str, claude: str, resume: str | None, prompt_file: Path) ->
 
 def write_launch(doc_id: str, cwd: str, claude: str, resume: str | None,
                  prompt: str) -> Path:
-    """Write the prompt and the script under the data dir; return the script."""
+    """Write the prompt (none when it is empty) and the script under the data
+    dir; return the script."""
     folder = config.data_dir() / "launch"
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
-    prompt_file = folder / f"{doc_id}-{stamp}.prompt"
+    prompt_file = folder / f"{doc_id}-{stamp}.prompt" if prompt else None
     script = folder / f"{doc_id}-{stamp}.sh"
     try:
         folder.mkdir(parents=True, exist_ok=True)
-        prompt_file.write_text(prompt, encoding="utf-8")
+        if prompt_file is not None:
+            prompt_file.write_text(prompt, encoding="utf-8")
         script.write_text(script_text(cwd, claude, resume, prompt_file), encoding="utf-8")
         script.chmod(0o700)
     except OSError as exc:

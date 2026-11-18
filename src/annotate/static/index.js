@@ -10,7 +10,10 @@
  * attaching moves the document into that session's group.
  * In the header of every group, "Cleanup files" (decision of 2026-10-19 for
  * the documents without a known session, 2026-10-20 for each session): an
- * in-page confirmation, then the batch, on that group only.
+ * in-page confirmation, then the batch, on that group only. The id chip of a
+ * session that is not open (2026-11-18) is a button that resumes it in a
+ * terminal tab, without a prompt (POST /api/sessions/<id>/resume); an open
+ * session keeps a plain chip, since it never gets a second tab.
  * For the daemon: Restart and Stop. Start is the one control that cannot live
  * here: a stopped daemon serves no page to click it on; the tray keeps it.
  * For the tracked folders (decision of 2026-10-07): add one under the home
@@ -264,6 +267,8 @@
     repo: '<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/>'
       + '<path d="M6 8.5v7M18 10.5c0 4-6 3-11 5.5"/>',
     chevron: '<path d="M6 9l6 6 6-6"/>',
+    // a terminal prompt: the id chip that resumes the session in a tab
+    resume: '<path d="M4 17l6-5-6-5"/><path d="M12 19h8"/>',
   };
 
   function icon(name) {
@@ -278,6 +283,21 @@
     const node = make('span', 'chip' + (cls ? ' ' + cls : ''));
     node.append(icon(name), text);
     if (title) node.title = title;
+    return node;
+  }
+
+  // The id of a session that is not open is a button: it resumes the session
+  // in a terminal tab, without a prompt (2026-11-18). An open session keeps a
+  // plain chip: it never gets a second tab, so no button is offered.
+  function idChip(group) {
+    const id = group.session_id;
+    if (group.open) return chip('id', id.slice(0, 8), 'mono', id + ': already open in a terminal');
+    const node = make('button', 'chip mono resume');
+    node.type = 'button';
+    node.append(icon('resume'), id.slice(0, 8));
+    node.title = 'Resume this session in a terminal tab: ' + id;
+    node.addEventListener('click', () => act(node, async () =>
+      (await call('POST', '/api/sessions/' + encodeURIComponent(id) + '/resume')).message));
     return node;
   }
 
@@ -355,7 +375,7 @@
       const folder = cwd && repo && cwd.startsWith(repo + '/') ? cwd.slice(repo.length + 1)
         : cwd && cwd !== repo ? tilde(cwd) : '';
       if (folder) meta.append(chip('folder', folder, 'mono', 'The folder the session runs in: ' + cwd));
-      meta.append(chip('id', group.session_id.slice(0, 8), 'mono', group.session_id));
+      meta.append(idChip(group));
       meta.append(chip('doc', plural(docs.length, 'document')));
     } else {
       // The count stays in sight when the group is folded.

@@ -187,6 +187,11 @@
           color: var(--muted); line-height: 1.6; }
   .chip svg { width: 13px; height: 13px; flex: none; color: var(--tone-text); }
   .chip.mono { font-size: 12px; overflow-wrap: anywhere; }
+  /* The id of a session that is not open resumes it: a chip that reads as a
+     button (its tone, a terminal prompt, a hover), the same size as the others. */
+  button.chip { color: var(--tone-text); border-color: var(--tone); font-weight: 600; }
+  button.chip:hover { background: var(--tone-soft); border-color: var(--tone-text); color: var(--ink); }
+  button.chip:hover svg { color: var(--ink); }
   /* Folding: the header is the handle; folded, it keeps its count. */
   .foldable { cursor: pointer; }
   .fold-toggle { width: 32px; height: 32px; padding: 0; display: grid; place-items: center;

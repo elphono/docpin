@@ -36,6 +36,9 @@
     GET    /api/folders/suggest?path=<text>  subfolders, for the folder field
     GET    /api/sessions                     the conversations a document can be attached
                                              to: open first, then most recent (claude.sessions)
+    POST   /api/sessions/<session>/resume    a terminal tab resumes it, without a prompt, in
+                                             the folder of its most recent listed document;
+                                             refused if open, unresumable or unlisted
     POST   /api/cleanup  {session, ids}      "Cleanup files": unmanage these documents of the
                                              session ("" none; all of the group without ids);
                                              their files are deleted later if untouched
@@ -85,7 +88,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote, unquote, urlsplit
 
 from . import (__version__, browser, claude, cleanup, config, folders, gdrive, htmldoc, inbox,
-               listeners, registry, runtime, scanner, sender, service, sync, vault)
+               listeners, registry, runtime, scanner, sender, service, sync, terminal, vault)
 from .config import Config
 
 log = logging.getLogger("annotate")
@@ -269,6 +272,11 @@ class Handler(BaseHTTPRequestHandler):
         except vault.VaultError as exc:
             log.error("%s %s: %s", method, self.path, exc)
             self._error(HTTPStatus.INTERNAL_SERVER_ERROR, str(exc))
+        except terminal.TerminalError as exc:
+            # A tab that could not be opened (resume a session, resume an
+            # arrival): its reason, not a connection cut without an answer.
+            log.error("%s %s: %s", method, self.path, exc)
+            self._error(HTTPStatus.INTERNAL_SERVER_ERROR, f"no terminal could be opened: {exc}")
         except (registry.RegistryError, sender.SendError, browser.OpenError,
                 htmldoc.HtmlDocError, listeners.ListenerError) as exc:
             log.error("%s %s: %s", method, self.path, exc)
@@ -325,6 +333,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._api(method, parts[2:], query)
         if parts[:2] == ["api", "folders"]:
             return self._folders(method, parts[2:], query)
+        if parts[:2] == ["api", "sessions"] and len(parts) == 4 and parts[3] == "resume":
+            if method != "POST":
+                raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "POST only")
+            return self._resume(parts[2])
         if parts == ["api", "sessions"]:
             if method != "GET":
                 raise Refused(HTTPStatus.METHOD_NOT_ALLOWED, "GET only")
@@ -389,6 +401,32 @@ class Handler(BaseHTTPRequestHandler):
             "forgotten": gone, "kept": kept, "after_days": cleanup.after_days(),
             "message": cleanup.message(gone, kept, session=str(session),
                                        missing=cleanup.missing(result))})
+
+    def _resume(self, session: str) -> None:
+        """A terminal tab resumes `session`, without a prompt: the user types
+        the first message. Never a second tab for an open session; the folder
+        is chosen as "Send to session" does, from the most recent listed
+        document, not from the transcript, whose `cwd` names the other
+        machine's folder for a conversation received from it."""
+        if not claude.SESSION_ID.match(session):
+            raise Refused(HTTPStatus.BAD_REQUEST, f"{session!r} is not a session id")
+        docs = [d for d in registry.summary() if d.get("session_id") == session]
+        if not docs:
+            raise Refused(HTTPStatus.NOT_FOUND, f"no listed document belongs to session {session}")
+        if inbox.open_sessions(session):
+            raise Refused(HTTPStatus.CONFLICT, f"session {session} is already open in a "
+                                               "terminal: switch to that tab")
+        if not claude.resumable(session):
+            raise Refused(HTTPStatus.CONFLICT, f"no conversation {session} on this machine: "
+                                               "claude --resume would not find it")
+        entry = docs[0]                      # summary() is newest first
+        cwd = str(registry.usable_cwd(entry.get("cwd"), Path(entry["path"])))
+        program = self.server.sender.opener(f"resume-{session[:8]}", cwd,
+                                            self.server.cfg.claude_bin, session, "")
+        log.info("session %s resumed in a %s from the web page, in %s", session, program, cwd)
+        name = claude.title(session) or f"Session {session[:8]}"
+        self._json(HTTPStatus.OK, {"session": session, "cwd": cwd, "program": program,
+                                   "message": f"{name} resumed in a terminal tab, in {cwd}."})
 
     def _excluded(self, method: str, query: dict[str, list[str]]) -> None:
         if method == "POST":

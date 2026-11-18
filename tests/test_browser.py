@@ -178,7 +178,9 @@ def test_the_index_page_offers_every_tray_control(tmp_path, monkeypatch, make_do
     assert done.returncode == 0, done.stdout + done.stderr
     listener.join(5)
     assert "from the index page" in box["waiter"].prompt  # type: ignore[union-attr]
-    assert opener.calls == []
+    # One tab only: Other session's id chip; the open session's chip is no button.
+    assert [(c["resume"], c["cwd"], c["prompt"]) for c in opener.calls] == [
+        ("s-other", str((ws / "other").resolve()), "")]
     from annotate import folders
     delta = (reports / "delta.html").resolve()
     # Foxtrot went with its session's cleanup; its file was missing: not indexed.

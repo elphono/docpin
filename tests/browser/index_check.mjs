@@ -101,6 +101,31 @@ try {
   await page.setViewportSize({ width: 1100, height: 900 });
   step('screenshots taken; fits at 390 px');
 
+  // The id chip (2026-11-18): an open session's is a plain chip, never a
+  // button (it gets no second tab); a closed session's resumes THAT session
+  // in a terminal tab, and the click does not fold its group.
+  const idChip = (title) => group(title).locator('.group-meta .chip.mono', { hasText: /^s-/ });
+  const liveChip = await idChip('Live session').evaluate((n) => [n.tagName, n.textContent, n.title]);
+  if (liveChip[0] !== 'SPAN' || liveChip[1] !== 's-live' || !liveChip[2].includes('already open in a terminal') ||
+      await group('Live session').locator('.group-meta button').count()) {
+    fail('the open session\'s id chip: ' + JSON.stringify(liveChip));
+  }
+  const otherChip = idChip('Other session');
+  const otherInfo = await otherChip.evaluate((n) => [n.tagName, n.textContent, n.title, n.className]);
+  if (otherInfo[0] !== 'BUTTON' || otherInfo[1] !== 's-other' || !otherInfo[2].includes('s-other') ||
+      !otherInfo[2].startsWith('Resume this session in a terminal tab') || !otherInfo[3].includes('chip')) {
+    fail('the closed session\'s id chip: ' + JSON.stringify(otherInfo));
+  }
+  await group('Other session').locator('.group-head').screenshot({ path: join(outDir, 'index-resume-chip.png') });
+  await otherChip.click();
+  await page.waitForFunction(() => document.getElementById('message').textContent.includes('resumed in a terminal tab'));
+  const resumed = await page.locator('#message').textContent();
+  if (!resumed.startsWith('Other session resumed in a terminal tab, in ') || !resumed.endsWith('/other.')) {
+    fail('resume message: ' + resumed);
+  }
+  if (await group('Other session').evaluate((n) => n.classList.contains('folded'))) fail('the id chip folded its group');
+  step('the open session\'s id is a plain chip; the other one resumes it: ' + resumed);
+
   // The filter and the "Notes to send" view.
   await page.locator('#filter').fill('echo');
   await page.waitForFunction(() => document.querySelectorAll('.doc').length === 1);
