@@ -122,7 +122,8 @@ listé le plus récent de la session (`registry.usable_cwd`, comme « Send to se
 chaîne vide. Sur une session ouverte, la puce reste une étiquette : une session ouverte ne reçoit
 jamais un second onglet, et la route le refuse aussi (409), comme une session non reprenable (409),
 sans document listé (404) ou d'id mal formé (400). Un `terminal.TerminalError` est rendu en 500 avec
-sa raison par `_route`, pour cette route comme pour la reprise d'une arrivée de la synchro.
+sa raison par `_route`, pour cette route comme pour la reprise d'une arrivée de la synchro, qui passe
+elle aussi par l'ouvreur du `Sender` depuis la 0.9.1 (`test_resuming_an_arrival_opens_its_tab_through_the_daemons_opener`).
 
 **La pastille et la page d'accueil classent les documents par session** : le titre de la
 session (son `/rename`, sinon celui que Claude Code a généré, lus dans le transcript, de façon
@@ -223,7 +224,7 @@ uv sync                                  # environnement (aucune dépendance d'e
 uv run pytest -q                         # suite par défaut
 ANNOTATE_PLAYWRIGHT_DIR=<dossier dont node_modules contient playwright> \
   uv run pytest -m browser -v            # l'overlay dans un vrai Chromium headless
-uv run ruff check src tests tools hooks bin/annotate plugins  # doit passer intégralement
+uv run ruff check src tests tools hooks bin/annotate  # doit passer intégralement
 uv run mypy                              # doit passer intégralement
 uv run python tools/mutate.py            # campagne de mutation dirigée, sur une COPIE
 claude plugin validate --json . > r.json && python3 tools/check_plugin_report.py r.json

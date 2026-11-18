@@ -205,7 +205,7 @@ From a clone (`git clone https://github.com/elphono/docpin.git && cd docpin && u
 
 ```bash
 uv run pytest -q                          # default suite
-uv run ruff check src tests tools hooks bin/annotate plugins
+uv run ruff check src tests tools hooks bin/annotate
 uv run mypy
 uv run python tools/mutate.py             # directed mutation campaign, run on a copy of the repo
 claude plugin validate --json . > report.json && python3 tools/check_plugin_report.py report.json

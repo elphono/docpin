@@ -718,6 +718,11 @@ MUTATIONS = (
              '    prompt_file = folder / f"{doc_id}-{stamp}.prompt" if prompt else None\n',
              '    prompt_file = folder / f"{doc_id}-{stamp}.prompt"\n',
              "a bare resume writes no prompt file and passes no prompt"),
+    # Resume an arrival of the sync through the daemon's opener (0.9.1).
+    Mutation("arrival-default-opener", "src/annotate/server.py",
+             "                    session, self.server.cfg, opener=self.server.sender.opener))\n",
+             "                    session, self.server.cfg))\n",
+             "resuming an arrival opens its tab through the daemon's opener"),
     Mutation("resume-chip-open-button", "src/annotate/static/index.js",
              "    if (group.open) return chip('id', id.slice(0, 8), 'mono', id + ': already open in a terminal');\n",
              "    if (false) return chip('id', id.slice(0, 8), 'mono', id + ': already open in a terminal');\n",

@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import annotate
-from annotate import browser, claude, listeners, registry, sender, server, terminal
+from annotate import browser, claude, listeners, registry, sender, server, sync, terminal
 from annotate.config import Config
 from fakes import RecordingOpener, compact, conversation, register_session, transcript
 
@@ -772,11 +772,45 @@ def test_a_tab_that_cannot_open_is_an_http_error_with_its_reason(daemon, make_do
     assert daemon.request("GET", "/api/docs")[0] == 200
 
 
-def test_an_arrival_whose_tab_cannot_open_is_an_http_error_with_its_reason(daemon,
-                                                                           monkeypatch):
-    def refuse(session, cfg):
-        raise terminal.TerminalError("neither wt.exe nor cmd.exe is on the PATH")
+ARRIVAL = "5e1f0c2a-7d3b-4c61-9a8e-2b4d6f8a0c1e"
 
-    monkeypatch.setattr(server.sync, "resume", refuse)
-    status, body = daemon.request("POST", "/api/sync/arrivals/s-arr/resume")
+
+def ready_arrival(clone: Path) -> None:
+    """A conversation received from the other machine and placed in `clone`,
+    as `sync.poll_once` leaves it: its transcript where `claude --resume`
+    looks, and its entry in the sync state."""
+    clone.mkdir(parents=True)
+    conversation(claude.projects_dir(), ARRIVAL, cwd=str(clone))
+    sync.update({"machine_name": "mini-pc"})
+    state = sync.load_state()
+    state["arrivals"] = [{"session_id": ARRIVAL, "title": "Moved", "from": "laptop",
+                          "sent_at": "2026-11-18T10:00:00Z", "sent_cwd": "/elsewhere/proj",
+                          "sent_warnings": [], "status": "ready", "cwd": str(clone),
+                          "error": "", "warnings": []}]
+    sync._save_state(state)
+
+
+def test_resuming_an_arrival_opens_its_tab_through_the_daemons_opener(daemon, tmp_path):
+    clone = tmp_path / "here" / "proj"
+    ready_arrival(clone)
+    status, body = daemon.request("POST", f"/api/sync/arrivals/{ARRIVAL}/resume")
+    assert status == 200, body
+    assert body["message"] == f"Moved resumed in a terminal tab, in {clone}."
+    [call] = daemon.opener.calls
+    assert call == {
+        "doc_id": f"sync-{ARRIVAL[:8]}", "cwd": str(clone), "claude_bin": Config().claude_bin,
+        "resume": ARRIVAL,
+        "prompt": "This conversation was moved from the machine laptop to this one (mini-pc). "
+                  f"The project is now at {clone}, it was at /elsewhere/proj: paths named "
+                  "earlier in the conversation may differ here.\n"
+                  "Check `git status`, then wait for my next message."}
+
+
+def test_an_arrival_whose_tab_cannot_open_is_an_http_error_with_its_reason(daemon, tmp_path):
+    ready_arrival(tmp_path / "here" / "proj")
+    daemon.opener.fail = terminal.TerminalError("neither wt.exe nor cmd.exe is on the PATH")
+    status, body = daemon.request("POST", f"/api/sync/arrivals/{ARRIVAL}/resume")
     assert status == 500 and "neither wt.exe nor cmd.exe" in body["error"]
+    assert len(daemon.opener.calls) == 1
+    # The daemon still answers on a fresh connection.
+    assert daemon.request("GET", "/api/docs")[0] == 200

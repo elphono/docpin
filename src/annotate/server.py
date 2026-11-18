@@ -473,7 +473,8 @@ class Handler(BaseHTTPRequestHandler):
                 sync.dismiss(session)
                 return self._json(HTTPStatus.OK, {"dismissed": session})
             if method == "POST" and action == "resume":
-                return self._json(HTTPStatus.OK, sync.resume(session, self.server.cfg))
+                return self._json(HTTPStatus.OK, sync.resume(
+                    session, self.server.cfg, opener=self.server.sender.opener))
             if method == "POST" and action == "place":
                 item = sync.place(session, str(body.get("path") or ""))
                 return self._json(HTTPStatus.OK, {"arrival": item, "message":
