@@ -461,6 +461,7 @@
     // after an update, it is older than this page until restarted. A daemon
     // that does not say `stale` at all predates the check, so it is too.
     staleBanner.hidden = data.stale === false;
+    $('version').textContent = data.version ? `v${data.version}` : '';
     renderOverview(data);
     if (busy || menuOpen() || picker.open || cleanupDialog.open) return;
     const key = JSON.stringify([data.docs, data.sessions, filterText, onlyPending, home,
