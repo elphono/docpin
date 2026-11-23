@@ -80,21 +80,14 @@ items marked **(proposal)** are ideas, not commitments.
    docpin's own state for the session's documents (notes, references). Next: send the documents' state
    with the conversation, and offer to commit and push before sending. A public server, if there is an
    audience, keeps the same sealed format: the server only holds bytes it cannot read.
-2. **First real run from Windows Chrome / Edge.** Alt+click has only been measured in headless
-   Chromium on Linux, and Alt alone can give the focus to the browser menu on Windows. The tray icon
-   and its menu have not been looked at on a screen either. Fix whatever this shows.
-3. **More than pins: highlight, circle, strike-through** **(design done)**. Each annotation gets a
+2. **More than pins: highlight, circle, strike-through** **(design done)**. Each annotation gets a
    `kind`; text kinds anchor on an exact quote with a 32-character prefix and suffix (the Web
    Annotation `TextQuoteSelector` idea), which survives block reordering where a selector does not.
    The tool is chosen in the bar, as in a screenshot tool — no gesture recognition. The prompt changes
    by one word per note.
-4. **Watch the inbox route.** Posting into an open session's inbox relies on a line format that Claude
+3. **Watch the inbox route.** Posting into an open session's inbox relies on a line format that Claude
    Code does not document (captured on real messages, frozen by `tests/test_inbox.py`). Re-capture
    it when `peerProtocol` changes, and switch to a documented interface if one appears.
-5. **A render check for documents** **(proposal)**: light, dark and phone-width captures of a document,
-   its horizontal overflow and the smallest text of its figures, run by the skill instead of looked at
-   by hand. Needs Playwright, declared by the plugin.
-6. **PyPI.** For whoever does not use Claude Code plugins: `uvx` / `pipx` without a clone.
 
 ## Later
 
