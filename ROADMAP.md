@@ -4,6 +4,29 @@ What is shipped, what is next, and what is deliberately not on the list. Items m
 done)** have a written design in [docs/etude-reutilisation.html](docs/etude-reutilisation.html);
 items marked **(proposal)** are ideas, not commitments.
 
+## Shipped — v0.5 to v0.9
+
+- **Resume a closed session from the home page** (v0.9): its id chip opens a terminal tab with
+  `claude --resume`, in the folder of its latest document, with no prompt; you type the first message.
+  An open session's chip stays a label: it never gets a second tab.
+- **A document whose file is gone leaves the list** at the daemon's next pass (v0.9.2), unless unsent
+  notes, a waiting session or a delivery still need it. Temporary copies of a repository had left
+  hundreds of “file missing” rows.
+- **The home page shows the docpin version** after its title (v0.9.3).
+- **Updates reach the daemon at the next session start** (v0.8): the plugin installs its new code and
+  restarts a daemon still running the old one, including one docpin started itself without systemd
+  (macOS, Linux without `annotate service`), never one started by hand.
+- **What changed since the last send glows** (v0.7): every send keeps a copy of the document (outside
+  the repository); the page compares it block by block with the file, makes what is new or changed
+  glow softly, keeps removed passages closed in its panel, folds the sections already read, and offers
+  a navigator and **Mark as read**. The panel starts folded into a pill that keeps the navigator.
+- **Cleanup files** in the header of each group (v0.5): the group's unprotected documents are
+  unmanaged at once, and their files are deleted 30 days later if untouched. **Excluded folders**:
+  nothing under them is a document, even inside a tracked folder. **Rescan** also drops what is older
+  than its window.
+- **An older launcher can no longer take the daemon back** to its version (v0.5.2): a session opened
+  before an update keeps the old `annotate` on its PATH, and it used to repoint the running code.
+
 ## Shipped — v0.4
 
 - **Carry a conversation to your other machine** (`sync.py`): **Send** seals the transcript on this
@@ -44,12 +67,6 @@ items marked **(proposal)** are ideas, not commitments.
 - Three delivery routes: the session that waits (`annotate wait`), the open session's inbox, a
   Windows Terminal tab that resumes the session. Never a background session.
 - Home page and Windows tray icon, with per-document and per-daemon controls.
-- What changed since the last send: every send keeps a copy of the document (outside the
-  repository); the page compares it block by block with the file, makes what is new or changed glow,
-  keeps removed passages closed in its panel, folds the sections already read, and offers a navigator
-  and **Mark as read**. The panel starts folded into a pill that keeps the navigator.
-- Updates reach the daemon at the next session start: the plugin installs its new code and restarts a
-  daemon still running the old one.
 - Attach a document to any resumable conversation of the machine from the home page (open sessions
   first, filter as you type), or detach it; `annotate sessions` / `attach` / `detach` do the same.
 - Local-only HTTP API, hardened against pages that merely target `localhost`.
