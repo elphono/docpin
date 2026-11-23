@@ -26,6 +26,18 @@ that is not a JSON object is dropped rather than forwarded.
 
 A session answering notes edits the document, and is registered again:
 that is how `delivered` becomes `answered` (registry.register).
+
+**A subagent's write** (Claude Code runs the hooks in subagents too; their
+input carries a non-empty `agent_id`, and the `session_id` of the parent
+session) is said to `annotate register` through the environment variable
+`ANNOTATE_SUBAGENT`, never through a flag: the launcher runs
+`runtime/current`, which may be an older version than this hook, and an
+unknown flag would make its argparse fail and the registration vanish
+without a word. An older
+version ignores the variable and registers the document as before. The
+answer then tells the subagent not to start `annotate wait` (it would end
+with the subagent, and the notes would reach no one) but to report the
+command to the session that launched it.
 """
 from __future__ import annotations
 
@@ -35,6 +47,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+# Read by `annotate register --hook` (src/annotate/cli.py, SUBAGENT_VARIABLE).
+SUBAGENT_VARIABLE = "ANNOTATE_SUBAGENT"
 
 
 def annotate_command() -> list[str] | None:
@@ -79,9 +94,14 @@ def main() -> int:
     if cwd:
         argv += ["--cwd", cwd]
     argv.append("--hook")
+    env = dict(os.environ)
+    env.pop(SUBAGENT_VARIABLE, None)
+    agent = payload.get("agent_id")
+    if isinstance(agent, str) and agent:
+        env[SUBAGENT_VARIABLE] = agent
     try:
         done = subprocess.run(argv, capture_output=True, text=True, timeout=20,
-                              check=False)
+                              check=False, env=env)
     except (OSError, subprocess.SubprocessError):
         return 0
     try:

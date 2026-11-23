@@ -54,7 +54,10 @@ def _isolated_data(tmp_path, monkeypatch):
     for name in ("ANNOTATE_PORT", "ANNOTATE_CLAUDE", "WSL_DISTRO_NAME",
                  # set when the suite runs inside a Claude Code session:
                  # `annotate wait` would report that session's id
-                 "CLAUDE_CODE_SESSION_ID"):
+                 "CLAUDE_CODE_SESSION_ID",
+                 # set by the hook for a subagent's write: the main
+                 # session's answer is the default
+                 "ANNOTATE_SUBAGENT"):
         monkeypatch.delenv(name, raising=False)
     # `claude.resumable` reads ~/.claude/projects: never the user's own.
     projects = tmp_path / "claude-projects"

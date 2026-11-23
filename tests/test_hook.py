@@ -21,10 +21,13 @@ def run_hook(tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     calls = tmp_path / "calls.jsonl"
+    subagents = tmp_path / "subagents.jsonl"   # ANNOTATE_SUBAGENT, per call
     fake = bin_dir / "annotate"
     answer = tmp_path / "answer.txt"     # what the fake prints, if present
     fake.write_text(f"#!{sys.executable}\nimport json, os, sys\n"
                     f"open({str(calls)!r}, 'a').write(json.dumps(sys.argv[1:]) + '\\n')\n"
+                    f"open({str(subagents)!r}, 'a').write("
+                    f"json.dumps(os.environ.get('ANNOTATE_SUBAGENT')) + '\\n')\n"
                     f"if os.path.exists({str(answer)!r}):\n"
                     f"    sys.stdout.write(open({str(answer)!r}).read())\n")
     fake.chmod(0o755)
@@ -50,7 +53,14 @@ def run_hook(tmp_path):
             return []
         return [json.loads(line) for line in calls.read_text().splitlines()]
 
+    def seen_subagents():
+        if not subagents.exists():
+            return []
+        return [json.loads(line) for line in subagents.read_text().splitlines()]
+
     run.outputs = outputs  # type: ignore[attr-defined]
+    run.subagents = seen_subagents  # type: ignore[attr-defined]
+    run.bin_dir = bin_dir  # type: ignore[attr-defined]
     return run, workspace
 
 
@@ -117,3 +127,66 @@ def test_a_missing_session_does_not_clear_the_recorded_one(run_hook):
     doc = ws / "proj" / "docs" / "x.html"
     assert run(payload(doc, session="")) == [
         ["register", str(doc), "--cwd", "/somewhere/repo", "--hook"]]
+
+
+def subagent_payload(path, agent_id="agent-7f3a", agent_type="general-purpose"):
+    """What Claude Code gives a hook that runs in a subagent: the parent's
+    session id, plus `agent_id` and `agent_type`."""
+    return {**payload(path), "agent_id": agent_id, "agent_type": agent_type}
+
+def test_a_subagent_write_is_said_to_annotate_through_the_environment(run_hook):
+    """The arguments stay those of a main session's write: only the variable
+    differs, which an older `annotate` ignores."""
+    run, ws = run_hook
+    doc = ws / "proj" / "docs" / "x.html"
+    assert run(subagent_payload(doc)) == [
+        ["register", str(doc), "--session", "sess-abc", "--cwd", "/somewhere/repo",
+         "--hook"]]
+    assert run.subagents() == ["agent-7f3a"]
+
+def test_a_main_session_write_says_nothing_of_a_subagent(run_hook):
+    """Not even a variable left in the hook's own environment reaches annotate."""
+    run, ws = run_hook
+    doc = ws / "proj" / "docs" / "x.html"
+    run(payload(doc))
+    run(payload(doc), extra_env={"ANNOTATE_SUBAGENT": "stale"})
+    run({**payload(doc), "agent_id": ""})
+    run({**payload(doc), "agent_id": 12})
+    assert run.subagents() == [None, None, None, None]
+
+STRICT_OLD_ANNOTATE = """\
+import argparse, json, os, sys
+# The `register` arguments of docpin 0.9.4, and nothing else: argparse exits
+# with 2 on anything unknown, as the real older version would.
+top = argparse.ArgumentParser(prog="annotate")
+sub = top.add_subparsers(dest="command", required=True)
+reg = sub.add_parser("register")
+reg.add_argument("path")
+reg.add_argument("--session")
+reg.add_argument("--cwd")
+reg.add_argument("--hook", action="store_true")
+args = top.parse_args()
+open(os.environ["STRICT_MARK"], "a").write(args.path + "\\n")
+print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                  "additionalContext": "registered by the older version"}}))
+"""
+
+def test_an_older_annotate_still_registers_a_subagents_document(run_hook, tmp_path):
+    """The launcher runs `runtime/current`, which may be older than the hook:
+    a strict 0.9.4-like `annotate` must register the subagent's document and
+    its answer reach the subagent."""
+    run, ws = run_hook
+    strict = run.bin_dir / "annotate"
+    strict.write_text(f"#!{sys.executable}\n{STRICT_OLD_ANNOTATE}")
+    strict.chmod(0o755)
+    mark = tmp_path / "registered.txt"
+    env = {**os.environ, "STRICT_MARK": str(mark)}
+    # The witness: this fake does refuse what it does not know.
+    refused = subprocess.run([str(strict), "register", "x.html", "--subagent"], env=env,
+                             capture_output=True, text=True, timeout=30)
+    assert refused.returncode == 2 and not mark.exists()
+    doc = ws / "proj" / "docs" / "x.html"
+    run(subagent_payload(doc), extra_env={"STRICT_MARK": str(mark)})
+    assert mark.read_text().splitlines() == [str(doc)]
+    assert json.loads(run.outputs[-1])["hookSpecificOutput"]["additionalContext"] == \
+        "registered by the older version"

@@ -393,3 +393,65 @@ def test_is_document_answers_as_the_folders_rule_for_html_and_markdown(tmp_path,
         assert capsys.readouterr().out == "document\n"
         assert cli.main(["is-document", str(elsewhere / name)]) == 1, name
         assert capsys.readouterr().out == "not a document\n"
+
+
+def _hook_context(path, capsys):
+    assert cli.main(["register", str(path), "--session", "s1", "--hook"]) == 0
+    answer = json.loads(capsys.readouterr().out)
+    assert answer["hookSpecificOutput"]["hookEventName"] == "PostToolUse"
+    return answer["hookSpecificOutput"]["additionalContext"]
+
+
+def test_the_main_session_is_told_to_wait_in_the_very_words_of_before(daemon, make_doc,
+                                                                       capsys):
+    """The witness of the subagent variant: the main session's text is the
+    0.9.4 one, to the character."""
+    path = make_doc("<p>x</p>")
+    context = _hook_context(path, capsys)
+    doc_id = registry.register(path)["id"]
+    url = f"http://127.0.0.1:{config.load_config().port}/docs/{doc_id}"
+    command = f"{config.annotate_command()} wait {doc_id}"
+    assert context == (
+        f"annotate: {path} is registered as document {doc_id}; the user reads and "
+        f"annotates it at {url} . So that the user's notes come back to THIS "
+        f"conversation, start this command once, as a background command "
+        f"(run_in_background), and do not wait for it: `{command}`. It ends when the "
+        f"user sends notes, and its output is the notes. Skip it if it is already "
+        f"running for {doc_id}.")
+
+
+def test_a_subagent_is_told_not_to_wait_but_to_report_the_command(daemon, make_doc,
+                                                                   capsys, monkeypatch):
+    """A background `annotate wait` dies with the subagent that started it:
+    the notes would reach no one, and the document would look listened to."""
+    monkeypatch.setenv(cli.SUBAGENT_VARIABLE, "agent-7f3a")
+    path = make_doc("<p>x</p>")
+    context = _hook_context(path, capsys)
+    doc_id = registry.register(path)["id"]
+    url = f"http://127.0.0.1:{config.load_config().port}/docs/{doc_id}"
+    command = f"{config.annotate_command()} wait {doc_id}"
+    assert f"{path} is registered as document {doc_id}" in context
+    assert "You are a subagent: do NOT start `annotate wait` yourself" in context
+    assert "would end with you" in context and "notes would be lost" in context
+    assert "copy into your final report, word for word" in context
+    assert f"the address {url} and the command `{command}`" in context
+    assert "the session that launched you starts that command once" in context
+    assert "start this command once, as a background command" not in context
+    assert "run_in_background" not in context
+
+
+@pytest.mark.parametrize("subagent", ["", "agent-7f3a"])
+def test_nothing_is_said_while_a_session_listens_even_to_a_subagent(
+        daemon, make_doc, capsys, monkeypatch, subagent):
+    if subagent:
+        monkeypatch.setenv(cli.SUBAGENT_VARIABLE, subagent)
+    path = make_doc("<p>x</p>")
+    doc_id = registry.register(path, session="s1")["id"]
+    waiter = threading.Thread(target=lambda: daemon.sender.board.wait(
+        doc_id, "s1", "/", lambda: True, 10), daemon=True)
+    waiter.start()
+    assert _listening(doc_id)
+    assert cli.main(["register", str(path), "--hook"]) == 0
+    assert json.loads(capsys.readouterr().out) == {}
+    daemon.sender.board.deliver(doc_id, "release")
+    waiter.join(5)

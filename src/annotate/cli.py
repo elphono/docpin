@@ -69,15 +69,39 @@ def _listening(cfg: config.Config, doc_id: str) -> bool:
     return bool(data.get("listening"))
 
 
+# Set by hooks/register-on-write.py when a subagent wrote the document (the
+# hook input's `agent_id`). A variable and not a flag: an older `annotate` that
+# the launcher may still run ignores it, where argparse would refuse a flag.
+SUBAGENT_VARIABLE = "ANNOTATE_SUBAGENT"
+
+
 def hook_output(cfg: config.Config, entry: dict[str, object]) -> dict[str, object]:
     """What the PostToolUse hook prints: tell the writing session how to get
     the user's notes back, unless a session already listens for them.
 
     Telling it on every write would repeat the same paragraph each time the
-    session edits its document, answering notes included."""
+    session edits its document, answering notes included.
+
+    A subagent is told NOT to start `annotate wait`: a background command
+    ends with the subagent that started it, the notes would come back to no
+    one, and while it lives the document counts as listened to, which
+    silences this answer for the session that talks to the user. It reports
+    the address and the command instead, for that session to start."""
     doc_id = str(entry["id"])
     if _listening(cfg, doc_id):
         return {}
+    if os.environ.get(SUBAGENT_VARIABLE):
+        context = (
+            f"annotate: {entry['path']} is registered as document {doc_id}; the user "
+            f"reads and annotates it at {_url(cfg, doc_id)} . You are a subagent: do "
+            f"NOT start `annotate wait` yourself. It would end with you, and the "
+            f"user's notes would be lost. Instead, copy into your final report, word "
+            f"for word, the address {_url(cfg, doc_id)} and the command "
+            f"`{prompt.wait_command(doc_id)}`, so that the session that launched you "
+            f"starts that command once, in the background, and gives the user the "
+            f"link.")
+        return {"hookSpecificOutput": {"hookEventName": "PostToolUse",
+                                       "additionalContext": context}}
     context = (
         f"annotate: {entry['path']} is registered as document {doc_id}; the user "
         f"reads and annotates it at {_url(cfg, doc_id)} . So that the user's notes "

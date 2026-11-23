@@ -45,6 +45,14 @@ After the `Write`, docpin's hook answers with the document's address and a comma
    give the path, or ask the user to add the folder from docpin's home page
    (`annotate open`).
 
+**Written by a subagent.** A background command ends with the subagent that started it,
+so the hook tells a subagent not to start `annotate wait`.
+
+- The subagent copies into its final report, word for word, the document's address and
+  the `annotate wait <id>` command the hook gave it.
+- The session that talks to the user starts that command once, in the background, and
+  gives the user the link, as in steps 1 and 2.
+
 ## When the notes come back
 
 The background command's output lists each note with its number, the text it was pinned
