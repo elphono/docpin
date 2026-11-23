@@ -865,10 +865,13 @@
   }
   syncStore.addEventListener('change', showStore);
 
+  // The sync panel is hidden until it is usable (2026-11-23); its code stays.
+  const SYNC_PANEL_SHOWN = false;
+
   function renderSync(data) {
     syncData = data;
-    if (!data) {
-      syncBox.hidden = true;            // a daemon older than this page
+    if (!data || !SYNC_PANEL_SHOWN) {
+      syncBox.hidden = true;            // hidden, or a daemon older than this page
       return;
     }
     syncBox.hidden = false;
